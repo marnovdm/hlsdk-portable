@@ -41,6 +41,7 @@ extern "C"
 {
 #include "pm_shared.h"
 }
+#include "vr_usercmd_sidecar.h"
 
 #include <string.h>
 #include "vcs_info.h"
@@ -150,6 +151,16 @@ char DLLEXPORT HUD_PlayerMoveTexture( char *name )
 void DLLEXPORT HUD_PlayerMove( struct playermove_s *ppmove, int server )
 {
 	PM_Move( ppmove, server );
+}
+
+extern "C" void DLLEXPORT VR_BeginPMUsercmdSidecar( const vr_usercmd_sidecar_t *sample )
+{
+	PM_VRBeginUsercmdSidecar( sample );
+}
+
+extern "C" void DLLEXPORT VR_EndPMUsercmdSidecar( void )
+{
+	PM_VREndUsercmdSidecar();
 }
 
 int DLLEXPORT Initialize( cl_enginefunc_t *pEnginefuncs, int iVersion )

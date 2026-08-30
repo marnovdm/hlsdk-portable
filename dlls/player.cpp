@@ -404,6 +404,12 @@ BOOL CBasePlayer::HasFreshVRPose( void ) const
 		gpGlobals->time - m_flVRPoseTime <= VR_POSE_FRESHNESS;
 }
 
+BOOL CBasePlayer::HasFreshUsercmdVRPose( void ) const
+{
+	return m_flVRUsercmdPoseTime >= 0.0f && gpGlobals->time >= m_flVRUsercmdPoseTime &&
+		gpGlobals->time - m_flVRUsercmdPoseTime <= VR_POSE_FRESHNESS;
+}
+
 Vector CBasePlayer::GetWeaponPosition( void ) const
 {
 	return HasFreshVRPose() ? m_vecVRWeaponPosition : pev->origin + pev->view_ofs;
@@ -488,6 +494,7 @@ void CBasePlayer::ClearVRPose( void )
 	m_vecVROffhandPosition = g_vecZero;
 	m_vecVROffhandAngles = g_vecZero;
 	m_flVRPoseTime = -1.0f;
+	m_flVRUsercmdPoseTime = -1.0f;
 }
 
 void CBasePlayer::SetVRUse2State( BOOL down )
@@ -536,6 +543,30 @@ BOOL CBasePlayer::UpdateVRPose( const Vector &weaponPosition, const Vector &weap
 	m_vecVROffhandPosition = offhandPosition;
 	m_vecVROffhandAngles = normalizedOffhandAngles;
 	m_flVRPoseTime = gpGlobals->time;
+	return TRUE;
+}
+
+BOOL CBasePlayer::UpdateVRPoseSidecar( const vr_usercmd_sidecar_t *sample )
+{
+	Vector weaponPosition, weaponAngles, weaponVelocity, offhandPosition, offhandAngles;
+	const Vector eyePosition = EyePosition();
+	int index;
+
+	if( !sample || sample->version != VR_USERCMD_SIDECAR_VERSION ||
+		!( sample->flags & VR_USERCMD_SIDECAR_POSE_VALID ))
+		return FALSE;
+
+	for( index = 0; index < 3; ++index )
+	{
+		weaponPosition[index] = eyePosition[index] + sample->weapon_position[index] * ( 1.0f / 8.0f );
+		weaponAngles[index] = sample->weapon_angles[index] * ( 1.0f / 128.0f );
+		weaponVelocity[index] = sample->weapon_velocity[index] * ( 1.0f / 8.0f );
+		offhandPosition[index] = eyePosition[index] + sample->offhand_position[index] * ( 1.0f / 8.0f );
+		offhandAngles[index] = sample->offhand_angles[index] * ( 1.0f / 128.0f );
+	}
+	if( !UpdateVRPose( weaponPosition, weaponAngles, weaponVelocity, offhandPosition, offhandAngles ))
+		return FALSE;
+	m_flVRUsercmdPoseTime = gpGlobals->time;
 	return TRUE;
 }
 
