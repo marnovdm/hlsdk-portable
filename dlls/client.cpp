@@ -40,6 +40,10 @@
 #include "netadr.h"
 #include "pm_shared.h"
 
+#include <float.h>
+#include <math.h>
+#include <stdlib.h>
+
 extern DLL_GLOBAL ULONG		g_ulModelIndexPlayer;
 extern DLL_GLOBAL BOOL		g_fGameOver;
 extern DLL_GLOBAL int		g_iSkillLevel;
@@ -55,6 +59,20 @@ extern cvar_t multibyte_only;
 extern int g_teamplay;
 
 void LinkUserMessages( void );
+
+static BOOL VR_ParseCommandFloat( const char *text, float *value )
+{
+	char *end;
+	double parsed;
+
+	if( !text || !text[0] )
+		return FALSE;
+	parsed = strtod( text, &end );
+	if( end == text || *end || parsed != parsed || parsed < -FLT_MAX || parsed > FLT_MAX )
+		return FALSE;
+	*value = (float)parsed;
+	return *value == *value && *value >= -FLT_MAX && *value <= FLT_MAX;
+}
 
 /*
  * used by kill command and disconnect command
@@ -100,6 +118,9 @@ GLOBALS ASSUMED SET:  g_fGameOver
 */
 void ClientDisconnect( edict_t *pEntity )
 {
+	if( pEntity->pvPrivateData )
+		GetClassPtr( (CBasePlayer *)&pEntity->v )->ClearVRPose();
+
 	if( g_fGameOver )
 		return;
 
@@ -593,6 +614,37 @@ void ClientCommand( edict_t *pEntity )
 
 		if( pPlayer->IsObserver() )
 			pPlayer->Observer_SetMode( atoi( CMD_ARGV( 1 ) ) );
+	}
+	else if( FStrEq( pcmd, "updatevr" ) )
+	{
+		float values[15];
+		int index;
+
+		if( CMD_ARGC() != 16 )
+			return;
+		for( index = 0; index < ARRAYSIZE( values ); ++index )
+		{
+			if( !VR_ParseCommandFloat( CMD_ARGV( index + 1 ), &values[index] ) )
+				return;
+		}
+
+		GetClassPtr( (CBasePlayer *)pev )->UpdateVRPose(
+			Vector( values[0], values[1], values[2] ),
+			Vector( values[3], values[4], values[5] ),
+			Vector( values[6], values[7], values[8] ),
+			Vector( values[9], values[10], values[11] ),
+			Vector( values[12], values[13], values[14] ) );
+	}
+	else if( FStrEq( pcmd, "vruse2" ) )
+	{
+		if( CMD_ARGC() != 2 )
+			return;
+		if( FStrEq( CMD_ARGV( 1 ), "0" ) )
+			GetClassPtr( (CBasePlayer *)pev )->SetVRUse2State( FALSE );
+		else if( FStrEq( CMD_ARGV( 1 ), "1" ) )
+			GetClassPtr( (CBasePlayer *)pev )->SetVRUse2State( TRUE );
+		else
+			return;
 	}
 	else if( FStrEq( pcmd, "closemenus" ) )
 	{

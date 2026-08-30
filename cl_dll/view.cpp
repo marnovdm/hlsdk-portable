@@ -26,6 +26,7 @@
 #include "shake.h"
 #include "hltv.h"
 #include "view.h"
+#include "vr_client.h"
 
 // Spectator Mode
 extern "C" 
@@ -625,13 +626,14 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 		view->origin[2] += 0.5f;
 	}
 
-	// Add in the punchangle, if any
-	VectorAdd( pparams->viewangles, pparams->punchangle, pparams->viewangles );
-
-	// Include client side punch, too
-	VectorAdd( pparams->viewangles, (float *)&g_ev_punchangle, pparams->viewangles );
-
-	V_DropPunchAngle( pparams->frametime, (float *)&g_ev_punchangle );
+	if( VR_ShouldApplyWeaponRecoil() )
+	{
+		// VR weapons are tracked independently. Keeping this optional avoids
+		// camera recoil fighting the physical controller pose.
+		VectorAdd( pparams->viewangles, pparams->punchangle, pparams->viewangles );
+		VectorAdd( pparams->viewangles, (float *)&g_ev_punchangle, pparams->viewangles );
+		V_DropPunchAngle( pparams->frametime, (float *)&g_ev_punchangle );
+	}
 
 	// smooth out stair step ups
 #if 1
@@ -1548,6 +1550,11 @@ void DLLEXPORT V_CalcRefdef( struct ref_params_s *pparams )
 	{
 		V_CalcNormalRefdef( pparams );
 	}
+
+	// VR eye rendering happens after this callback. Only the primary game view
+	// may update the shared viewmodel state.
+	if( pparams->nextView == 0 )
+		VR_UpdateViewmodel( pparams );
 /*
 // Example of how to overlay the whole screen with red at 50 % alpha
 #define SF_TEST	1

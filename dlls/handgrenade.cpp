@@ -149,6 +149,14 @@ void CHandGrenade::WeaponIdle( void )
 		Vector vecSrc = m_pPlayer->pev->origin + m_pPlayer->pev->view_ofs + gpGlobals->v_forward * 16.0f;
 
 		Vector vecThrow = gpGlobals->v_forward * flVel + m_pPlayer->pev->velocity;
+		if( m_pPlayer->HasFreshVRPose() )
+		{
+			// The authoritative pose stream supplies the hand's recent motion;
+			// retain stock throw math automatically when that stream is stale.
+			vecSrc = m_pPlayer->GetWeaponPosition();
+			vecThrow = m_pPlayer->GetWeaponVelocity() * ( 2.0f / 3.0f ) + m_pPlayer->pev->velocity;
+			flVel = vecThrow.Length();
+		}
 
 		// alway explode 3 seconds after the pin was pulled
 		float time = m_flStartThrow - gpGlobals->time + 3.0f;

@@ -132,6 +132,8 @@ public:
 	void _cdecl UserCmd_Close( void );
 	void _cdecl UserCmd_NextWeapon( void );
 	void _cdecl UserCmd_PrevWeapon( void );
+	void _cdecl UserCmd_NextWeaponSlot( void );
+	void _cdecl UserCmd_PrevWeaponSlot( void );
 
 private:
 	float m_fFade;
@@ -407,6 +409,7 @@ public:
 	void Reset( void );
 	int MsgFunc_Flashlight( const char *pszName,  int iSize, void *pbuf );
 	int MsgFunc_FlashBat( const char *pszName,  int iSize, void *pbuf );
+	int HasFlashlight( void ) const;
 
 private:
 	HSPRITE m_hSprite1;

@@ -30,6 +30,10 @@ This file contains "stubs" of class member implementations so that we can predic
 #include	"nodes.h"
 #include	"soundent.h"
 #include	"skill.h"
+#include	"cl_entity.h"
+#include	"../vr_client.h"
+
+extern struct cl_entity_s *GetViewEntity( void );
 
 // Globals used by game logic
 const Vector g_vecZero = Vector( 0, 0, 0 );
@@ -305,7 +309,33 @@ int CBasePlayer::GetCustomDecalFrames( void ) { return -1; }
 void CBasePlayer::DropPlayerItem( char *pszItemName ) { }
 BOOL CBasePlayer::HasPlayerItem( CBasePlayerItem *pCheckItem ) { return FALSE; }
 BOOL CBasePlayer::SwitchWeapon( CBasePlayerItem *pWeapon )  { return FALSE; }
-Vector CBasePlayer::GetGunPosition( void ) { return g_vecZero; }
+Vector CBasePlayer::GetGunPosition( void ) { return GetWeaponPosition(); }
+BOOL CBasePlayer::HasFreshVRPose( void ) const
+{
+	return VR_IsActive() && GetViewEntity() != NULL;
+}
+Vector CBasePlayer::GetWeaponPosition( void ) const
+{
+	cl_entity_s *viewEntity = GetViewEntity();
+	return HasFreshVRPose() && viewEntity ? Vector( viewEntity->curstate.origin ) : pev->origin + pev->view_ofs;
+}
+Vector CBasePlayer::GetWeaponAngles( void ) const
+{
+	cl_entity_s *viewEntity = GetViewEntity();
+	return HasFreshVRPose() && viewEntity ? Vector( viewEntity->curstate.angles ) : pev->v_angle;
+}
+Vector CBasePlayer::GetWeaponViewAngles( void ) const
+{
+	Vector angles = GetWeaponAngles();
+	if( HasFreshVRPose() )
+		angles.x = -angles.x;
+	return angles;
+}
+Vector CBasePlayer::GetWeaponVelocity( void ) const
+{
+	cl_entity_s *viewEntity = GetViewEntity();
+	return HasFreshVRPose() && viewEntity ? Vector( viewEntity->curstate.velocity ) : g_vecZero;
+}
 const char *CBasePlayer::TeamID( void ) { return ""; }
 int CBasePlayer::GiveAmmo( int iCount, const char *szName, int iMax ) { return 0; }
 void CBasePlayer::AddPoints( int score, BOOL bAllowNegativeScore ) { } 

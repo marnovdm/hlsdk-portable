@@ -374,9 +374,9 @@ void CCrossbow::FireSniperBolt()
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-	Vector anglesAim = m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle;
+	Vector anglesAim = m_pPlayer->GetWeaponViewAngles();
 	UTIL_MakeVectors( anglesAim );
-	Vector vecSrc = m_pPlayer->GetGunPosition() - gpGlobals->v_up * 2.0f;
+	Vector vecSrc = m_pPlayer->GetWeaponPosition() - gpGlobals->v_up * 2.0f;
 	Vector vecDir = gpGlobals->v_forward;
 
 	UTIL_TraceLine( vecSrc, vecSrc + vecDir * 8192, dont_ignore_monsters, m_pPlayer->edict(), &tr );
@@ -417,13 +417,13 @@ void CCrossbow::FireBolt()
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-	Vector anglesAim = m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle;
+	Vector anglesAim = m_pPlayer->GetWeaponViewAngles();
 	UTIL_MakeVectors( anglesAim );
 
 	anglesAim.x	= -anglesAim.x;
 
 #if !CLIENT_DLL
-	Vector vecSrc	= m_pPlayer->GetGunPosition() - gpGlobals->v_up * 2.0f;
+	Vector vecSrc	= m_pPlayer->GetWeaponPosition() - gpGlobals->v_up * 2.0f;
 	Vector vecDir	= gpGlobals->v_forward;
 
 	CCrossbowBolt *pBolt = CCrossbowBolt::BoltCreate();
@@ -473,6 +473,16 @@ void CCrossbow::SecondaryAttack()
 
 	pev->nextthink = UTIL_WeaponTimeBase() + 0.1f;
 	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0f;
+}
+
+void CCrossbow::ItemPostFrame()
+{
+	// Scope proximity is a separate edge-triggered action so holding a normal
+	// secondary-fire control cannot repeatedly toggle the scope.
+	if( m_pPlayer->m_afButtonPressed & IN_ALT1 )
+		SecondaryAttack();
+
+	CBasePlayerWeapon::ItemPostFrame();
 }
 
 void CCrossbow::Reload( void )
