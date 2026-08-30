@@ -53,6 +53,12 @@ void CHudFlashlight::Reset( void )
 	m_flBat = 1.0f;
 }
 
+int CHudFlashlight::HasFlashlight( void ) const
+{
+	return ( gHUD.m_iWeaponBits & ( 1 << WEAPON_SUIT ) ) != 0 &&
+		!( gHUD.m_iHideHUDDisplay & HIDEHUD_FLASHLIGHT );
+}
+
 int CHudFlashlight::VidInit( void )
 {
 	int HUD_flash_empty = gHUD.GetSpriteIndex( "flash_empty" );

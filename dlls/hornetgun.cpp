@@ -132,9 +132,8 @@ void CHgun::PrimaryAttack()
 		return;
 	}
 #if !CLIENT_DLL
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle );
-
-	CBaseEntity *pHornet = CBaseEntity::Create( "hornet", m_pPlayer->GetGunPosition() + gpGlobals->v_forward * 16.0f + gpGlobals->v_right * 8.0f + gpGlobals->v_up * -12.0f, m_pPlayer->pev->v_angle, m_pPlayer->edict() );
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+	CBaseEntity *pHornet = CBaseEntity::Create( "hornet", m_pPlayer->GetWeaponPosition() + gpGlobals->v_forward * 16.0f + gpGlobals->v_right * 8.0f + gpGlobals->v_up * -12.0f, m_pPlayer->GetWeaponAngles(), m_pPlayer->edict() );
 	pHornet->pev->velocity = gpGlobals->v_forward * 300.0f;
 
 	float flRechargeTimePause = 0.5f;
@@ -184,9 +183,9 @@ void CHgun::SecondaryAttack( void )
 	CBaseEntity *pHornet;
 	Vector vecSrc;
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle );
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
 
-	vecSrc = m_pPlayer->GetGunPosition() + gpGlobals->v_forward * 16.0f + gpGlobals->v_right * 8.0f + gpGlobals->v_up * -12.0f;
+	vecSrc = m_pPlayer->GetWeaponPosition() + gpGlobals->v_forward * 16.0f + gpGlobals->v_right * 8.0f + gpGlobals->v_up * -12.0f;
 
 	m_iFirePhase++;
 	switch( m_iFirePhase )
@@ -222,7 +221,7 @@ void CHgun::SecondaryAttack( void )
 		break;
 	}
 
-	pHornet = CBaseEntity::Create( "hornet", vecSrc, m_pPlayer->pev->v_angle, m_pPlayer->edict() );
+	pHornet = CBaseEntity::Create( "hornet", vecSrc, m_pPlayer->GetWeaponAngles(), m_pPlayer->edict() );
 	pHornet->pev->velocity = gpGlobals->v_forward * 1200.0f;
 	pHornet->pev->angles = UTIL_VecToAngles( pHornet->pev->velocity );
 

@@ -38,6 +38,7 @@
 #include "hltv.h"
 
 #include "ropes.h"
+#include <float.h>
 
 // #define DUCKFIX
 
@@ -68,6 +69,35 @@ extern CGraph WorldGraph;
 
 #define	FLASH_DRAIN_TIME	 1.2f //100 units/3 minutes
 #define	FLASH_CHARGE_TIME	 0.2f // 100 units/20 seconds  (seconds per unit)
+
+#define VR_POSE_FRESHNESS 0.25f
+#define VR_POSE_MAX_DISTANCE 128.0f
+#define VR_POSE_MAX_VELOCITY 4096.0f
+#define VR_POSE_MAX_ANGLE 36000.0f
+
+static BOOL VR_IsFiniteVector( const Vector &vector )
+{
+	return vector.x == vector.x && vector.x >= -FLT_MAX && vector.x <= FLT_MAX &&
+		vector.y == vector.y && vector.y >= -FLT_MAX && vector.y <= FLT_MAX &&
+		vector.z == vector.z && vector.z >= -FLT_MAX && vector.z <= FLT_MAX;
+}
+
+static float VR_NormalizeAngle( float angle )
+{
+	angle = UTIL_AngleMod( angle );
+	return angle >= 180.0f ? angle - 360.0f : angle;
+}
+
+static float VR_Abs( float value )
+{
+	return value < 0.0f ? -value : value;
+}
+
+static BOOL VR_IsWithinDistance( const Vector &position, const Vector &reference, float maximum )
+{
+	const Vector delta = position - reference;
+	return delta.x * delta.x + delta.y * delta.y + delta.z * delta.z <= maximum * maximum;
+}
 
 // Global Savedata for player
 TYPEDESCRIPTION	CBasePlayer::m_playerSaveData[] =
@@ -383,13 +413,148 @@ int CBasePlayer::TakeHealth( float flHealth, int bitsDamageType )
 
 Vector CBasePlayer::GetGunPosition()
 {
-	//UTIL_MakeVectors( pev->v_angle );
-	//m_HackedGunPos = pev->view_ofs;
-	Vector origin;
+	return GetWeaponPosition();
+}
 
-	origin = pev->origin + pev->view_ofs;
+BOOL CBasePlayer::HasFreshVRPose( void ) const
+{
+	return m_flVRPoseTime >= 0.0f && gpGlobals->time >= m_flVRPoseTime &&
+		gpGlobals->time - m_flVRPoseTime <= VR_POSE_FRESHNESS;
+}
 
-	return origin;
+Vector CBasePlayer::GetWeaponPosition( void ) const
+{
+	return HasFreshVRPose() ? m_vecVRWeaponPosition : pev->origin + pev->view_ofs;
+}
+
+Vector CBasePlayer::GetWeaponAngles( void ) const
+{
+	return HasFreshVRPose() ? m_vecVRWeaponAngles : pev->v_angle;
+}
+
+Vector CBasePlayer::GetWeaponViewAngles( void ) const
+{
+	if( HasFreshVRPose() )
+	{
+		Vector angles = m_vecVRWeaponAngles;
+		angles.x = -angles.x;
+		return angles;
+	}
+
+	return pev->v_angle;
+}
+
+Vector CBasePlayer::GetWeaponVelocity( void ) const
+{
+	return HasFreshVRPose() ? m_vecVRWeaponVelocity : g_vecZero;
+}
+
+Vector CBasePlayer::GetOffhandPosition( void ) const
+{
+	return HasFreshVRPose() ? m_vecVROffhandPosition : pev->origin + pev->view_ofs;
+}
+
+Vector CBasePlayer::GetOffhandAngles( void ) const
+{
+	return HasFreshVRPose() ? m_vecVROffhandAngles : pev->v_angle;
+}
+
+BOOL CBasePlayer::IsWeaponUnderWater( void ) const
+{
+	if( HasFreshVRPose() )
+		return UTIL_PointContents( m_vecVRWeaponPosition ) == CONTENTS_WATER;
+
+	return pev->waterlevel == 3;
+}
+
+static void VR_RestoreActionableHighlight( EHANDLE &handle, int renderMode, int renderFX, int renderAmount )
+{
+	CBaseEntity *entity = handle;
+	if( entity )
+	{
+		entity->pev->rendermode = renderMode;
+		entity->pev->renderfx = renderFX;
+		entity->pev->renderamt = renderAmount;
+	}
+	handle = (CBaseEntity *)NULL;
+}
+
+void CBasePlayer::ClearActionableHighlights( void )
+{
+	VR_RestoreActionableHighlight( m_hLastLocalUsableEntity,
+		m_iLastLocalUsableEntityRenderMode, m_iLastLocalUsableEntityRenderFX,
+		m_iLastLocalUsableEntityRenderAmount );
+	VR_RestoreActionableHighlight( m_hLastLocalUsableEntityAlt,
+		m_iLastLocalUsableEntityAltRenderMode, m_iLastLocalUsableEntityAltRenderFX,
+		m_iLastLocalUsableEntityAltRenderAmount );
+}
+
+void CBasePlayer::ClearVRUse2State( void )
+{
+	m_bVRUse2 = FALSE;
+	m_bVRUse2Pressed = FALSE;
+	m_bVRUse2Released = FALSE;
+}
+
+void CBasePlayer::ClearVRPose( void )
+{
+	ClearVRUse2State();
+	ClearActionableHighlights();
+	m_vecVRWeaponPosition = g_vecZero;
+	m_vecVRWeaponAngles = g_vecZero;
+	m_vecVRWeaponVelocity = g_vecZero;
+	m_vecVROffhandPosition = g_vecZero;
+	m_vecVROffhandAngles = g_vecZero;
+	m_flVRPoseTime = -1.0f;
+}
+
+void CBasePlayer::SetVRUse2State( BOOL down )
+{
+	if( !IsAlive() || IsObserver() || !HasFreshVRPose() )
+	{
+		ClearVRUse2State();
+		return;
+	}
+
+	if( m_bVRUse2 == down )
+		return;
+
+	m_bVRUse2 = down;
+	if( down )
+		m_bVRUse2Pressed = TRUE;
+	else
+		m_bVRUse2Released = TRUE;
+}
+
+BOOL CBasePlayer::UpdateVRPose( const Vector &weaponPosition, const Vector &weaponAngles,
+	const Vector &weaponVelocity, const Vector &offhandPosition, const Vector &offhandAngles )
+{
+	Vector normalizedWeaponAngles;
+	Vector normalizedOffhandAngles;
+	const Vector eyePosition = EyePosition();
+
+	if( !VR_IsFiniteVector( weaponPosition ) || !VR_IsFiniteVector( weaponAngles ) ||
+		!VR_IsFiniteVector( weaponVelocity ) || !VR_IsFiniteVector( offhandPosition ) ||
+		!VR_IsFiniteVector( offhandAngles ) || !VR_IsWithinDistance( weaponPosition, eyePosition, VR_POSE_MAX_DISTANCE ) ||
+		!VR_IsWithinDistance( offhandPosition, eyePosition, VR_POSE_MAX_DISTANCE ) ||
+		!VR_IsWithinDistance( weaponVelocity, g_vecZero, VR_POSE_MAX_VELOCITY ) ||
+		VR_Abs( weaponAngles.x ) > VR_POSE_MAX_ANGLE || VR_Abs( weaponAngles.y ) > VR_POSE_MAX_ANGLE ||
+		VR_Abs( weaponAngles.z ) > VR_POSE_MAX_ANGLE || VR_Abs( offhandAngles.x ) > VR_POSE_MAX_ANGLE ||
+		VR_Abs( offhandAngles.y ) > VR_POSE_MAX_ANGLE || VR_Abs( offhandAngles.z ) > VR_POSE_MAX_ANGLE )
+	{
+		ClearVRPose();
+		return FALSE;
+	}
+
+	normalizedWeaponAngles = Vector( VR_NormalizeAngle( weaponAngles.x ), VR_NormalizeAngle( weaponAngles.y ), VR_NormalizeAngle( weaponAngles.z ) );
+	normalizedOffhandAngles = Vector( VR_NormalizeAngle( offhandAngles.x ), VR_NormalizeAngle( offhandAngles.y ), VR_NormalizeAngle( offhandAngles.z ) );
+	m_vecVRWeaponPosition = weaponPosition;
+	m_vecVRWeaponAngles = normalizedWeaponAngles;
+	m_vecVRWeaponVelocity = weaponVelocity;
+	m_vecVROffhandPosition = offhandPosition;
+	m_vecVROffhandAngles = normalizedOffhandAngles;
+	m_flVRPoseTime = gpGlobals->time;
+	return TRUE;
 }
 
 //=========================================================
@@ -909,6 +1074,7 @@ entvars_t *g_pevLastInflictor;  // Set in combat.cpp.  Used to pass the damage i
 void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 {
 	CSound *pSound;
+	ClearVRPose();
 
 	// Holster weapon immediately, to allow it to cleanup
 	if( m_pActiveItem )
@@ -1540,125 +1706,165 @@ void CBasePlayer::StartObserver( Vector vecPosition, Vector vecViewAngle )
 //
 // PlayerUse - handles USE keypress
 //
-#define	PLAYER_SEARCH_RADIUS	(float)64
-
 void CBasePlayer::PlayerUse( void )
 {
 	if( IsObserver() )
+	{
+		ClearVRUse2State();
+		ClearActionableHighlights();
+		return;
+	}
+
+	BOOL poseFresh = HasFreshVRPose();
+	if( !poseFresh && ( m_bVRUse2 || m_bVRUse2Pressed || m_bVRUse2Released ||
+		(int)m_hLastLocalUsableEntity || (int)m_hLastLocalUsableEntityAlt ) )
+		ClearVRPose();
+
+	const BOOL highlightActionables = CVAR_GET_FLOAT( "vr_highlight_actionables" ) == 1.0f;
+	const BOOL primaryUseActive = ( pev->button | m_afButtonPressed | m_afButtonReleased ) & IN_USE;
+	const BOOL offhandUseActive = poseFresh && ( m_bVRUse2 || m_bVRUse2Pressed || m_bVRUse2Released );
+
+	if( !highlightActionables )
+		ClearActionableHighlights();
+
+	if( !highlightActionables && !primaryUseActive && !offhandUseActive )
 		return;
 
-	// Was use pressed or released?
-	if( !( ( pev->button | m_afButtonPressed | m_afButtonReleased) & IN_USE ) )
-		return;
-
-	// Hit Use on a train?
-	if( m_afButtonPressed & IN_USE )
+	if( ( m_afButtonPressed & IN_USE ) || m_bVRUse2Pressed )
 	{
 		if( m_pTank != 0 )
 		{
-			// Stop controlling the tank
-			// TODO: Send HUD Update
 			m_pTank->Use( this, this, USE_OFF, 0 );
+			m_bVRUse2Pressed = FALSE;
+			m_bVRUse2Released = FALSE;
 			return;
 		}
-		else
+		if( m_afPhysicsFlags & PFLAG_ONTRAIN )
 		{
-			if( m_afPhysicsFlags & PFLAG_ONTRAIN )
-			{
-				m_afPhysicsFlags &= ~PFLAG_ONTRAIN;
-				m_iTrain = TRAIN_NEW|TRAIN_OFF;
+			m_afPhysicsFlags &= ~PFLAG_ONTRAIN;
+			m_iTrain = TRAIN_NEW|TRAIN_OFF;
+			m_bVRUse2Pressed = FALSE;
+			m_bVRUse2Released = FALSE;
+			return;
+		}
 
-				CBaseEntity *pTrain = Instance( pev->groundentity );
-				if( pTrain && pTrain->Classify() == CLASS_VEHICLE )
-				{
-					( (CFuncVehicle *)pTrain )->m_pDriver = NULL;
-				}
-				return;
+		CBaseEntity *pTrain = CBaseEntity::Instance( pev->groundentity );
+		if( pTrain && !( pev->button & IN_JUMP ) && FBitSet( pev->flags, FL_ONGROUND ) &&
+			( pTrain->ObjectCaps() & FCAP_DIRECTIONAL_USE ) && pTrain->OnControls( pev ) )
+		{
+			m_afPhysicsFlags |= PFLAG_ONTRAIN;
+			m_iTrain = TrainSpeed( (int)pTrain->pev->speed, pTrain->pev->impulse );
+			m_iTrain |= TRAIN_NEW;
+			if( pTrain->Classify() == CLASS_VEHICLE )
+			{
+				EMIT_SOUND( ENT( pev ), CHAN_ITEM, "plats/vehicle_ignition.wav", 0.8, ATTN_NORM );
+				( (CFuncVehicle *)pTrain )->m_pDriver = this;
 			}
 			else
-			{	// Start controlling the train!
-				CBaseEntity *pTrain = CBaseEntity::Instance( pev->groundentity );
-
-				if( pTrain && !( pev->button & IN_JUMP ) && FBitSet( pev->flags, FL_ONGROUND ) && ( pTrain->ObjectCaps() & FCAP_DIRECTIONAL_USE ) && pTrain->OnControls( pev ) )
-				{
-					m_afPhysicsFlags |= PFLAG_ONTRAIN;
-					m_iTrain = TrainSpeed( (int)pTrain->pev->speed, pTrain->pev->impulse );
-					m_iTrain |= TRAIN_NEW;
-
-					if( pTrain->Classify() == CLASS_VEHICLE )
-					{
-						EMIT_SOUND( ENT( pev ), CHAN_ITEM, "plats/vehicle_ignition.wav", 0.8, ATTN_NORM );
-						( (CFuncVehicle *)pTrain )->m_pDriver = this;
-					}
-					else
-						EMIT_SOUND( ENT( pev ), CHAN_ITEM, "plats/train_use1.wav", 0.8, ATTN_NORM );
-					return;
-				}
-			}
+				EMIT_SOUND( ENT( pev ), CHAN_ITEM, "plats/train_use1.wav", 0.8, ATTN_NORM );
+			m_bVRUse2Pressed = FALSE;
+			m_bVRUse2Released = FALSE;
+			return;
 		}
 	}
 
+	PlayerUseInternal( highlightActionables, GetWeaponPosition(), GetWeaponViewAngles(),
+		pev->button & IN_USE, m_afButtonPressed & IN_USE, m_afButtonReleased & IN_USE, FALSE );
+	if( poseFresh && ( highlightActionables || offhandUseActive ) )
+	{
+		PlayerUseInternal( highlightActionables, GetOffhandPosition(), GetOffhandAngles(),
+			m_bVRUse2, m_bVRUse2Pressed, m_bVRUse2Released, TRUE );
+	}
+
+	m_bVRUse2Pressed = FALSE;
+	m_bVRUse2Released = FALSE;
+}
+
+#define PLAYER_HAND_SEARCH_RADIUS (float)64
+#define PLAYER_HAND_GESTURE_SEARCH_RADIUS (float)24
+
+void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &handOrigin,
+	const Vector &handAngles, BOOL useActive, BOOL usePressed, BOOL useReleased, BOOL offhand )
+{
 	CBaseEntity *pObject = NULL;
 	CBaseEntity *pClosest = NULL;
 	Vector vecLOS;
-	float flMaxDot = VIEW_FIELD_NARROW;
-	float flDot;
+	const BOOL gestureUse = CVAR_GET_FLOAT( "vr_gesture_triggered_use" ) == 1.0f;
+	const float searchRadius = gestureUse ? PLAYER_HAND_GESTURE_SEARCH_RADIUS : PLAYER_HAND_SEARCH_RADIUS;
+	float flMaxDot = gestureUse ? 0.0f : VIEW_FIELD_NARROW;
 
-	UTIL_MakeVectors( pev->v_angle );// so we know which way we are facing
-
-	while( ( pObject = UTIL_FindEntityInSphere( pObject, pev->origin, PLAYER_SEARCH_RADIUS ) ) != NULL )
+	UTIL_MakeVectors( handAngles );
+	while( ( pObject = UTIL_FindEntityInSphere( pObject, handOrigin, searchRadius ) ) != NULL )
 	{
 		if( pObject->ObjectCaps() & ( FCAP_IMPULSE_USE | FCAP_CONTINUOUS_USE | FCAP_ONOFF_USE ) )
 		{
-			// !!!PERFORMANCE- should this check be done on a per case basis AFTER we've determined that
-			// this object is actually usable? This dot is being done for every object within PLAYER_SEARCH_RADIUS
-			// when player hits the use key. How many objects can be in that area, anyway? (sjb)
-			vecLOS = ( VecBModelOrigin( pObject->pev ) - ( pev->origin + pev->view_ofs ) );
-
-			// This essentially moves the origin of the target to the corner nearest the player to test to see 
-			// if it's "hull" is in the view cone
+			vecLOS = VecBModelOrigin( pObject->pev ) - handOrigin;
 			vecLOS = UTIL_ClampVectorToBox( vecLOS, pObject->pev->size * 0.5 );
-
-			flDot = DotProduct( vecLOS , gpGlobals->v_forward );
-			if( flDot > flMaxDot )
+			if( DotProduct( vecLOS, gpGlobals->v_forward ) > flMaxDot )
 			{
-				// only if the item is in front of the user
 				pClosest = pObject;
-				flMaxDot = flDot;
-				//ALERT( at_console, "%s : %f\n", STRING( pObject->pev->classname ), flDot );
+				flMaxDot = DotProduct( vecLOS, gpGlobals->v_forward );
 			}
-			//ALERT( at_console, "%s : %f\n", STRING( pObject->pev->classname ), flDot );
 		}
 	}
 	pObject = pClosest;
 
-	// Found an object
-	if( pObject )
+	EHANDLE *lastHandle = offhand ? &m_hLastLocalUsableEntityAlt : &m_hLastLocalUsableEntity;
+	EHANDLE *otherHandle = offhand ? &m_hLastLocalUsableEntity : &m_hLastLocalUsableEntityAlt;
+	int *lastRenderMode = offhand ? &m_iLastLocalUsableEntityAltRenderMode : &m_iLastLocalUsableEntityRenderMode;
+	int *lastRenderFX = offhand ? &m_iLastLocalUsableEntityAltRenderFX : &m_iLastLocalUsableEntityRenderFX;
+	int *lastRenderAmount = offhand ? &m_iLastLocalUsableEntityAltRenderAmount : &m_iLastLocalUsableEntityRenderAmount;
+
+	if( highlightActionables )
+		VR_RestoreActionableHighlight( *lastHandle, *lastRenderMode, *lastRenderFX, *lastRenderAmount );
+
+	TraceResult tr;
+	UTIL_TraceLine( handOrigin, EyePosition(), ignore_monsters, edict(), &tr );
+	if( pObject && !tr.fStartSolid && tr.flFraction == 1.0f )
 	{
-		//!!!UNDONE: traceline here to prevent USEing buttons through walls			
-		int caps = pObject->ObjectCaps();
+		const int caps = pObject->ObjectCaps();
+		BOOL usingObject = FALSE;
 
-		if( m_afButtonPressed & IN_USE )
-			EMIT_SOUND( ENT(pev), CHAN_ITEM, "common/wpn_select.wav", 0.4, ATTN_NORM );
+		if( usePressed )
+		{
+			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_select.wav", 0.4, ATTN_NORM );
+			CLIENT_COMMAND( edict(), "vr_haptic 120 %d 0.8\n", offhand ? -2 : -1 );
+		}
 
-		if( ( ( pev->button & IN_USE ) && ( caps & FCAP_CONTINUOUS_USE ) ) ||
-			 ( ( m_afButtonPressed & IN_USE ) && ( caps & ( FCAP_IMPULSE_USE | FCAP_ONOFF_USE ) ) ) )
+		if( ( useActive && ( caps & FCAP_CONTINUOUS_USE ) ) ||
+			( usePressed && ( caps & ( FCAP_IMPULSE_USE | FCAP_ONOFF_USE ) ) ) )
 		{
 			if( caps & FCAP_CONTINUOUS_USE )
+			{
 				m_afPhysicsFlags |= PFLAG_USING;
-
+				usingObject = TRUE;
+			}
 			pObject->Use( this, this, USE_SET, 1 );
 		}
-		// UNDONE: Send different USE codes for ON/OFF.  Cache last ONOFF_USE object to send 'off' if you turn away
-		else if( ( m_afButtonReleased & IN_USE ) && ( pObject->ObjectCaps() & FCAP_ONOFF_USE ) )	// BUGBUG This is an "off" use
+		else if( useReleased && ( caps & FCAP_ONOFF_USE ) )
 		{
 			pObject->Use( this, this, USE_SET, 0 );
 		}
+
+		if( highlightActionables && pObject->pev->movetype != MOVETYPE_PUSHSTEP &&
+			pObject->Classify() != CLASS_HUMAN_PASSIVE && pObject->Classify() != CLASS_PLAYER_ALLY )
+		{
+			CBaseEntity *otherEntity = *otherHandle;
+			if( otherEntity != pObject )
+			{
+				*lastHandle = pObject;
+				*lastRenderMode = pObject->pev->rendermode;
+				*lastRenderFX = pObject->pev->renderfx;
+				*lastRenderAmount = pObject->pev->renderamt;
+				pObject->pev->renderfx = usingObject ? kRenderFxNoDissipation : kRenderFxPulseFast;
+				pObject->pev->rendermode = kRenderGlow;
+				pObject->pev->renderamt = 192;
+			}
+		}
 	}
-	else
+	else if( usePressed )
 	{
-		if( m_afButtonPressed & IN_USE )
-			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_denyselect.wav", 0.4, ATTN_NORM );
+		EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_denyselect.wav", 0.4, ATTN_NORM );
 	}
 }
 
@@ -3120,6 +3326,7 @@ ReturnSpot:
 
 void CBasePlayer::Spawn( void )
 {
+	ClearVRPose();
 	m_flStartCharge = gpGlobals->time;
 	pev->classname = MAKE_STRING( "player" );
 	pev->health = 100;
@@ -3284,6 +3491,7 @@ int CBasePlayer::Restore( CRestore &restore )
 		return 0;
 
 	int status = restore.ReadFields( "PLAYER", this, m_playerSaveData, ARRAYSIZE( m_playerSaveData ) );
+	ClearVRPose();
 
 	SAVERESTOREDATA *pSaveData = (SAVERESTOREDATA *)gpGlobals->pSaveData;
 	// landmark isn't present.
@@ -4564,6 +4772,14 @@ void CBasePlayer::EnableControl( BOOL fControl )
 //=========================================================
 Vector CBasePlayer::GetAutoaimVector( float flDelta )
 {
+	// Tracked weapons are already aimed by the player's hand.  Do not bend
+	// their projectiles back toward the desktop view direction.
+	if( HasFreshVRPose() )
+	{
+		UTIL_MakeVectors( GetWeaponViewAngles() );
+		return gpGlobals->v_forward;
+	}
+
 	if( g_iSkillLevel == SKILL_HARD )
 	{
 		UTIL_MakeVectors( pev->v_angle + pev->punchangle );

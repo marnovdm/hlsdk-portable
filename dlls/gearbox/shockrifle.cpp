@@ -143,7 +143,7 @@ void CShockrifle::PrimaryAttack()
 	if (m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0)
 		return;
 
-	if (m_pPlayer->pev->waterlevel == 3)
+	if (m_pPlayer->IsWeaponUnderWater())
 	{
 #if !CLIENT_DLL
 		int attenuation = 150 * m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType];
@@ -158,14 +158,9 @@ void CShockrifle::PrimaryAttack()
 	CreateChargeEffect();
 
 #if !CLIENT_DLL
-	Vector anglesAim = m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle;
-	anglesAim.x = -anglesAim.x;
-	UTIL_MakeVectors(m_pPlayer->pev->v_angle);
-
-	Vector vecSrc;
-	vecSrc = m_pPlayer->GetGunPosition() + gpGlobals->v_forward * 8 + gpGlobals->v_right * 12 + gpGlobals->v_up * -12;
-
-	CShock::Shoot(m_pPlayer->pev, anglesAim, vecSrc, gpGlobals->v_forward * 2000);
+	Vector anglesAim = m_pPlayer->GetWeaponViewAngles();
+	UTIL_MakeVectors(anglesAim);
+	CShock::Shoot(m_pPlayer->pev, anglesAim, m_pPlayer->GetWeaponPosition(), gpGlobals->v_forward * 2000);
 
 	m_flRechargeTime = gpGlobals->time + 1;
 #endif

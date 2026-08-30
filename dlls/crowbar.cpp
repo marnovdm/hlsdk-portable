@@ -24,6 +24,8 @@
 
 #define	CROWBAR_BODYHIT_VOLUME 128
 #define	CROWBAR_WALLHIT_VOLUME 512
+#define CROWBAR_MIN_PHYSICAL_SWING_SPEED 40.0f
+#define CROWBAR_PHYSICAL_LENGTH 30.0f
 
 LINK_ENTITY_TO_CLASS( weapon_crowbar, CCrowbar )
 
@@ -54,6 +56,11 @@ void CCrowbar::Spawn()
 	m_iClip = -1;
 
 	FallInit();// get ready to fall down.
+
+#if !CLIENT_DLL
+	m_flPhysicalLastWoosh = 0.0f;
+	ClearPhysicalSwingState();
+#endif
 }
 
 void CCrowbar::Precache( void )
@@ -105,8 +112,46 @@ BOOL CCrowbar::Deploy()
 
 void CCrowbar::Holster( int skiplocal /* = 0 */ )
 {
+#if !CLIENT_DLL
+	ClearPhysicalSwingState();
+#endif
 	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5f;
 	SendWeaponAnim( CROWBAR_HOLSTER );
+}
+
+void CCrowbar::ItemPostFrame()
+{
+	// Keep the stock trigger/button path intact for non-VR clients and for
+	// players who prefer button-driven melee.
+	CBasePlayerWeapon::ItemPostFrame();
+
+#if !CLIENT_DLL
+	if( !m_pPlayer || !m_pPlayer->HasFreshVRPose() )
+	{
+		ClearPhysicalSwingState();
+		return;
+	}
+
+	const float speed = m_pPlayer->GetWeaponVelocity().Length();
+	if( speed >= CROWBAR_MIN_PHYSICAL_SWING_SPEED )
+	{
+		if( !m_fPhysicalSwinging )
+		{
+			if( gpGlobals->time > m_flPhysicalLastWoosh + 0.5f )
+			{
+				EMIT_SOUND_DYN( ENT( pev ), CHAN_ITEM, "weapons/cbar_miss1.wav",
+					1.0f, ATTN_NORM, 0, 98 + RANDOM_LONG( 0, 3 ) );
+				m_flPhysicalLastWoosh = gpGlobals->time;
+			}
+			m_fPhysicalSwinging = TRUE;
+		}
+		CheckPhysicalSwing( speed );
+	}
+	else if( m_fPhysicalSwinging )
+	{
+		ClearPhysicalSwingState();
+	}
+#endif
 }
 
 void FindHullIntersection( const Vector &vecSrc, TraceResult &tr, float *mins, float *maxs, edict_t *pEntity )
@@ -180,8 +225,8 @@ int CCrowbar::Swing( int fFirst )
 
 	TraceResult tr;
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle );
-	Vector vecSrc = m_pPlayer->GetGunPosition();
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
 	Vector vecEnd = vecSrc + gpGlobals->v_forward * 32.0f;
 
 	UTIL_TraceLine( vecSrc, vecEnd, dont_ignore_monsters, ENT( m_pPlayer->pev ), &tr );
@@ -261,12 +306,12 @@ int CCrowbar::Swing( int fFirst )
 #endif
 			{
 				// first swing does full damage
-				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgCrowbar, gpGlobals->v_forward, &tr, DMG_CLUB ); 
+				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgCrowbar, gpGlobals->v_up, &tr, DMG_CLUB );
 			}
 			else
 			{
 				// subsequent swings do half
-				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgCrowbar * 0.5f, gpGlobals->v_forward, &tr, DMG_CLUB ); 
+				pEntity->TraceAttack( m_pPlayer->pev, gSkillData.plrDmgCrowbar * 0.5f, gpGlobals->v_up, &tr, DMG_CLUB );
 			}
 			ApplyMultiDamage( m_pPlayer->pev, m_pPlayer->pev );
 
@@ -348,6 +393,93 @@ int CCrowbar::Swing( int fFirst )
 #endif
 	return fDidHit;
 }
+
+#if !CLIENT_DLL
+void CCrowbar::CheckPhysicalSwing( float speed )
+{
+	TraceResult tr;
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+	const Vector vecSrc = m_pPlayer->GetWeaponPosition();
+	const Vector vecEnd = vecSrc + gpGlobals->v_up * CROWBAR_PHYSICAL_LENGTH;
+
+	UTIL_TraceLine( vecSrc, vecEnd, dont_ignore_monsters, ENT( m_pPlayer->pev ), &tr );
+	if( tr.fStartSolid || tr.fAllSolid || tr.flFraction >= 1.0f )
+		return;
+
+	CBaseEntity *pEntity = CBaseEntity::Instance( tr.pHit );
+	if( !pEntity || HasHitEntityThisSwing( pEntity ) )
+		return;
+
+	RememberHitEntityThisSwing( pEntity );
+	m_flPhysicalHitCount += 1.0f;
+
+	ClearMultiDamage();
+	pEntity->TraceAttack( m_pPlayer->pev,
+		gSkillData.plrDmgCrowbar * ( speed / CROWBAR_MIN_PHYSICAL_SWING_SPEED ) /
+			m_flPhysicalHitCount,
+		gpGlobals->v_up, &tr, DMG_CLUB );
+	ApplyMultiDamage( m_pPlayer->pev, m_pPlayer->pev );
+
+	float volume = 1.0f;
+	if( pEntity->Classify() != CLASS_NONE && pEntity->Classify() != CLASS_MACHINE )
+	{
+		const char *sounds[] = {
+			"weapons/cbar_hitbod1.wav",
+			"weapons/cbar_hitbod2.wav",
+			"weapons/cbar_hitbod3.wav"
+		};
+		EMIT_SOUND( ENT( m_pPlayer->pev ), CHAN_ITEM,
+			sounds[RANDOM_LONG( 0, 2 )], 1.0f, ATTN_NORM );
+		m_pPlayer->m_iWeaponVolume = CROWBAR_BODYHIT_VOLUME;
+		if( pEntity->IsAlive() )
+			volume = 0.25f;
+	}
+	else
+	{
+		float textureVolume = TEXTURETYPE_PlaySound( &tr, vecSrc,
+			vecSrc + ( vecEnd - vecSrc ) * 2.0f, BULLET_PLAYER_CROWBAR );
+		if( g_pGameRules->IsMultiplayer() )
+			textureVolume = 1.0f;
+		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM,
+			RANDOM_LONG( 0, 1 ) ? "weapons/cbar_hit1.wav" : "weapons/cbar_hit2.wav",
+			textureVolume, ATTN_NORM, 0, 98 + RANDOM_LONG( 0, 3 ) );
+	}
+
+	m_pPlayer->m_iWeaponVolume = (int)( volume * CROWBAR_WALLHIT_VOLUME );
+	DecalGunshot( &tr, BULLET_PLAYER_CROWBAR );
+	CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 90 -1 1\n" );
+}
+
+BOOL CCrowbar::HasHitEntityThisSwing( CBaseEntity *pEntity )
+{
+	for( size_t i = 0; i < ARRAYSIZE( m_hPhysicalHitEntities ); ++i )
+	{
+		if((CBaseEntity *)m_hPhysicalHitEntities[i] == pEntity )
+			return TRUE;
+	}
+	return FALSE;
+}
+
+void CCrowbar::RememberHitEntityThisSwing( CBaseEntity *pEntity )
+{
+	for( size_t i = 0; i < ARRAYSIZE( m_hPhysicalHitEntities ); ++i )
+	{
+		if( !m_hPhysicalHitEntities[i] )
+		{
+			m_hPhysicalHitEntities[i] = pEntity;
+			return;
+		}
+	}
+}
+
+void CCrowbar::ClearPhysicalSwingState()
+{
+	m_fPhysicalSwinging = FALSE;
+	m_flPhysicalHitCount = 0.0f;
+	for( size_t i = 0; i < ARRAYSIZE( m_hPhysicalHitEntities ); ++i )
+		m_hPhysicalHitEntities[i] = NULL;
+}
+#endif
 
 #if CROWBAR_IDLE_ANIM
 void CCrowbar::WeaponIdle( void )

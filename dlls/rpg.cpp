@@ -153,9 +153,11 @@ void CRpgRocket::Spawn( void )
 	SetThink( &CRpgRocket::IgniteThink );
 	SetTouch( &CGrenade::ExplodeTouch );
 
-	pev->angles.x -= 30.0f;
-	UTIL_MakeVectors( pev->angles );
-	pev->angles.x = -( pev->angles.x + 30.0f );
+	// Preserve the controller's complete orientation while applying the model's
+	// historical launch-pitch correction only to the velocity calculation.
+	Vector launchAngles = pev->angles;
+	launchAngles.x = -launchAngles.x - 30.0f;
+	UTIL_MakeVectors( launchAngles );
 
 	pev->velocity = gpGlobals->v_forward * 250.0f;
 	pev->gravity = 0.5f;
@@ -467,12 +469,12 @@ void CRpg::PrimaryAttack()
 		// player "shoot" animation
 		m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-		UTIL_MakeVectors( m_pPlayer->pev->v_angle );
-		Vector vecSrc = m_pPlayer->GetGunPosition() + gpGlobals->v_forward * 16.0f + gpGlobals->v_right * 8.0f + gpGlobals->v_up * -8.0f;
+		UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+		Vector vecSrc = m_pPlayer->GetWeaponPosition() + gpGlobals->v_forward * 16.0f + gpGlobals->v_right * 8.0f + gpGlobals->v_up * -8.0f;
 
-		CRpgRocket *pRocket = CRpgRocket::CreateRpgRocket( vecSrc, m_pPlayer->pev->v_angle, m_pPlayer, this );
+		CRpgRocket *pRocket = CRpgRocket::CreateRpgRocket( vecSrc, m_pPlayer->GetWeaponAngles(), m_pPlayer, this );
 
-		UTIL_MakeVectors( m_pPlayer->pev->v_angle );// RpgRocket::Create stomps on globals, so remake.
+		UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );// RpgRocket::Create stomps on globals, so remake.
 		pRocket->pev->velocity = pRocket->pev->velocity + gpGlobals->v_forward * DotProduct( m_pPlayer->pev->velocity, gpGlobals->v_forward );
 #endif
 
@@ -572,8 +574,8 @@ void CRpg::UpdateSpot( void )
 			m_pSpot = CLaserSpot::CreateSpot();
 		}
 
-		UTIL_MakeVectors( m_pPlayer->pev->v_angle );
-		Vector vecSrc = m_pPlayer->GetGunPosition();
+		UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+		Vector vecSrc = m_pPlayer->GetWeaponPosition();
 		Vector vecAiming = gpGlobals->v_forward;
 
 		TraceResult tr;

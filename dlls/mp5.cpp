@@ -147,8 +147,11 @@ void CMP5::PrimaryAttack()
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
-	Vector vecSrc = m_pPlayer->GetGunPosition();
-	Vector vecAiming = m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
+	Vector vecAiming = m_pPlayer->HasFreshVRPose()
+		? gpGlobals->v_forward
+		: m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
 	Vector vecDir;
 #if CLIENT_DLL
 	if( bIsMultiplayer() )
@@ -212,11 +215,11 @@ void CMP5::SecondaryAttack( void )
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
- 	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
 
 	// we don't add in player velocity anymore.
 	CGrenade::ShootContact( m_pPlayer->pev,
-					m_pPlayer->pev->origin + m_pPlayer->pev->view_ofs + gpGlobals->v_forward * 16.0f,
+				m_pPlayer->GetWeaponPosition() + gpGlobals->v_forward * 16.0f,
 					gpGlobals->v_forward * 800.0f );
 
 	int flags;

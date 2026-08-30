@@ -137,10 +137,9 @@ void CSporelauncher::PrimaryAttack()
 
 	// m_pPlayer->pev->effects = (int)(m_pPlayer->pev->effects) | EF_MUZZLEFLASH;
 	m_pPlayer->SetAnimation(PLAYER_ATTACK1);
-	Vector vecAngles = m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle;
-
+	Vector vecAngles = m_pPlayer->GetWeaponViewAngles();
 	UTIL_MakeVectors(vecAngles);
-	Vector vecSrc = m_pPlayer->GetGunPosition( ) + gpGlobals->v_forward * 16 + gpGlobals->v_right * 8 + gpGlobals->v_up * -8;
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
 
 #if !CLIENT_DLL
 	CSpore* pSpore = CSpore::CreateSpore(vecSrc, vecAngles, m_pPlayer, CSpore::ROCKET, false, false);
@@ -205,9 +204,9 @@ void CSporelauncher::SecondaryAttack(void)
 
 	// player "shoot" animation
 	m_pPlayer->SetAnimation(PLAYER_ATTACK1);
-	Vector vecAngles = m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle;
+	Vector vecAngles = m_pPlayer->GetWeaponViewAngles();
 	UTIL_MakeVectors(vecAngles);
-	Vector vecSrc = m_pPlayer->GetGunPosition( ) + gpGlobals->v_forward * 16 + gpGlobals->v_right * 8 + gpGlobals->v_up * -8;
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
 
 #if !CLIENT_DLL
 	CSpore* pSpore = CSpore::CreateSpore( vecSrc, vecAngles, m_pPlayer, CSpore::GRENADE, false, false);

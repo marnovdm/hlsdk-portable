@@ -30,6 +30,7 @@
 #include "event_api.h"
 #include "event_args.h"
 #include "in_defs.h"
+#include "vr_client.h"
 
 #include <string.h>
 
@@ -39,6 +40,36 @@
 extern engine_studio_api_t IEngineStudio;
 
 static int g_tracerCount[32];
+
+static void VR_HapticLocalWeaponFire( int idx, int bulletType )
+{
+	const unsigned int dominant = (unsigned int)VR_GetDominantHand();
+	const unsigned int support = dominant == VR_CLIENT_HAND_LEFT ? VR_CLIENT_HAND_RIGHT : VR_CLIENT_HAND_LEFT;
+
+	if( !EV_IsLocal( idx ) )
+		return;
+
+	switch( bulletType )
+	{
+	case BULLET_PLAYER_MP5:
+		VR_Haptic( 60.0f, dominant, 0.75f );
+		if( VR_IsWeaponStabilised() )
+			VR_Haptic( 60.0f, support, 0.5f );
+		break;
+	case BULLET_PLAYER_BUCKSHOT:
+		VR_Haptic( 120.0f, dominant, 0.9f );
+		if( VR_IsWeaponStabilised() )
+			VR_Haptic( 120.0f, support, 0.75f );
+		break;
+	case BULLET_PLAYER_357:
+		VR_Haptic( 120.0f, dominant, 0.8f );
+		break;
+	case BULLET_PLAYER_9MM:
+	default:
+		VR_Haptic( 120.0f, dominant, 0.4f );
+		break;
+	}
+}
 
 extern "C" char PM_FindTextureType( char *name );
 
@@ -414,6 +445,8 @@ void EV_HLDM_FireBullets( int idx, float *forward, float *right, float *up, int 
 	int iShot;
 	int tracer;
 
+	VR_HapticLocalWeaponFire( idx, iBulletType );
+
 	for( iShot = 1; iShot <= cShots; iShot++ )	
 	{
 		vec3_t vecDir, vecEnd;
@@ -732,6 +765,7 @@ void EV_FireMP52( event_args_t *args )
 
 	if( EV_IsLocal( idx ) )
 	{
+		VR_Haptic( 100.0f, (unsigned int)VR_GetDominantHand(), 0.6f );
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( MP5_LAUNCH, 0 );
 		V_PunchAxis( 0, -10 );
 	}
@@ -896,6 +930,7 @@ void EV_FireGauss( event_args_t *args )
 
 	if( EV_IsLocal( idx ) )
 	{
+		VR_Haptic( 120.0f, (unsigned int)VR_GetDominantHand(), 0.5f );
 		V_PunchAxis( 0.0f, -2.0f );
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( GAUSS_FIRE2, 0 );
 
@@ -1161,6 +1196,8 @@ void EV_Crowbar( event_args_t *args )
 
 	if( EV_IsLocal( idx ) )
 	{
+		VR_Haptic( 70.0f, (unsigned int)VR_GetDominantHand(), 0.35f );
+
 		switch( (g_iSwing++) % 3 )
 		{
 			case 0:
@@ -1237,6 +1274,8 @@ void EV_FireCrossbow2( event_args_t *args )
 
 	if( EV_IsLocal( idx ) )
 	{
+		VR_Haptic( 50.0f, (unsigned int)VR_GetDominantHand(), 0.6f );
+
 		if( args->iparam1 )
 			gEngfuncs.pEventAPI->EV_WeaponAnimation( CROSSBOW_FIRE1, 0 );
 		else
@@ -1313,6 +1352,8 @@ void EV_FireCrossbow( event_args_t *args )
 	//Only play the weapon anims if I shot it. 
 	if( EV_IsLocal( idx ) )
 	{
+		VR_Haptic( 50.0f, (unsigned int)VR_GetDominantHand(), 0.4f );
+
 		if( args->iparam1 )
 			gEngfuncs.pEventAPI->EV_WeaponAnimation( CROSSBOW_FIRE1, 0 );
 		else
@@ -1356,6 +1397,11 @@ void EV_FireRpg( event_args_t *args )
 	//Only play the weapon anims if I shot it. 
 	if( EV_IsLocal( idx ) )
 	{
+		const unsigned int dominant = (unsigned int)VR_GetDominantHand();
+		VR_Haptic( 200.0f, dominant, 0.9f );
+		if( VR_IsWeaponStabilised() )
+			VR_Haptic( 200.0f, dominant == VR_CLIENT_HAND_LEFT ? VR_CLIENT_HAND_RIGHT : VR_CLIENT_HAND_LEFT, 0.8f );
+
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( RPG_FIRE2, 0 );
 
 		V_PunchAxis( 0, -5.0 );
@@ -1436,6 +1482,8 @@ void EV_EgonFire( event_args_t *args )
 
 	if( iStartup )
 	{
+		if( EV_IsLocal( idx ) )
+			VR_Haptic( 1000.0f, (unsigned int)VR_GetDominantHand(), 0.5f );
 		if( iFireMode == FIRE_WIDE )
 			gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, EGON_SOUND_STARTUP, 0.98, ATTN_NORM, 0, 125 );
 		else
@@ -1532,6 +1580,8 @@ void EV_EgonStop( event_args_t *args )
 
 	if( args->iparam1 )
 		 gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, EGON_SOUND_OFF, 0.98, ATTN_NORM, 0, 100 );
+	if( EV_IsLocal( idx ) )
+		VR_Haptic( 0.0f, (unsigned int)VR_GetDominantHand(), 0.0f );
 
 	if( EV_IsLocal( idx ) )
 	{
@@ -1598,6 +1648,7 @@ void EV_HornetGunFire( event_args_t *args )
 	//Only play the weapon anims if I shot it.
 	if( EV_IsLocal( idx ) )
 	{
+		VR_Haptic( 100.0f, (unsigned int)VR_GetDominantHand(), 0.5f );
 		V_PunchAxis( 0, gEngfuncs.pfnRandomLong( 0, 2 ) );
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( HGUN_SHOOT, 0 );
 	}
@@ -1668,7 +1719,10 @@ void EV_TripmineFire( event_args_t *args )
 
 	//Hit something solid
 	if( tr.fraction < 1.0f && !last )
-		 gEngfuncs.pEventAPI->EV_WeaponAnimation ( TRIPMINE_DRAW, 0 );
+	{
+		VR_Haptic( 40.0f, (unsigned int)VR_GetDominantHand(), 0.35f );
+		gEngfuncs.pEventAPI->EV_WeaponAnimation ( TRIPMINE_DRAW, 0 );
+	}
 	
 	gEngfuncs.pEventAPI->EV_PopPMStates();
 }
@@ -1720,7 +1774,10 @@ void EV_SnarkFire( event_args_t *args )
 
 	//Find space to drop the thing.
 	if( tr.allsolid == 0 && tr.startsolid == 0 && tr.fraction > 0.25f )
-		 gEngfuncs.pEventAPI->EV_WeaponAnimation( SQUEAK_THROW, 0 );
+	{
+		VR_Haptic( 70.0f, (unsigned int)VR_GetDominantHand(), 0.4f );
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( SQUEAK_THROW, 0 );
+	}
 
 	gEngfuncs.pEventAPI->EV_PopPMStates();
 }

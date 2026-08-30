@@ -29,6 +29,8 @@ void FindHullIntersection(const Vector &vecSrc, TraceResult &tr, float *mins, fl
 
 #define PIPEWRENCH_ATTACK2_MIN_DAMAGE				45
 #define PIPEWRENCH_ATTACK2_MAX_DAMAGE				200
+#define PIPEWRENCH_MIN_PHYSICAL_SWING_SPEED 70.0f
+#define PIPEWRENCH_PHYSICAL_LENGTH 24.0f
 
 LINK_ENTITY_TO_CLASS(weapon_pipewrench, CPipeWrench)
 
@@ -60,6 +62,10 @@ void CPipeWrench::Spawn()
 	m_iClip = -1;
 
 	FallInit();// get ready to fall down.
+
+#if !CLIENT_DLL
+	ClearPhysicalSwingState();
+#endif
 }
 
 
@@ -109,9 +115,34 @@ BOOL CPipeWrench::Deploy()
 
 void CPipeWrench::Holster(int skiplocal /* = 0 */)
 {
+
+#if !CLIENT_DLL
+	ClearPhysicalSwingState();
+#endif
 	m_iSwingMode = 0;
 	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5;
 	SendWeaponAnim(PIPEWRENCH_HOLSTER);
+}
+
+void CPipeWrench::ItemPostFrame(void)
+{
+	CBasePlayerWeapon::ItemPostFrame();
+#if !CLIENT_DLL
+	if (!m_pPlayer || !m_pPlayer->HasFreshVRPose())
+	{
+		ClearPhysicalSwingState();
+		return;
+	}
+
+	const float speed = m_pPlayer->GetWeaponVelocity().Length();
+	if (speed >= PIPEWRENCH_MIN_PHYSICAL_SWING_SPEED)
+	{
+		m_fPhysicalSwinging = TRUE;
+		CheckPhysicalSwing(speed);
+	}
+	else if (m_fPhysicalSwinging)
+		ClearPhysicalSwingState();
+#endif
 }
 
 void CPipeWrench::PrimaryAttack()
@@ -154,7 +185,7 @@ int CPipeWrench::Swing(int fFirst)
 
 	TraceResult tr;
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle );
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
 	Vector vecSrc	= m_pPlayer->GetGunPosition( );
 	Vector vecEnd	= vecSrc + gpGlobals->v_forward * 32;
 
@@ -315,7 +346,7 @@ void CPipeWrench::BigSwing(void)
 {
 	TraceResult tr;
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle );
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
 	Vector vecSrc	= m_pPlayer->GetGunPosition( );
 	Vector vecEnd	= vecSrc + gpGlobals->v_forward * 32;
 
@@ -434,6 +465,65 @@ void CPipeWrench::BigSwing(void)
 #endif
 	}
 }
+
+#if !CLIENT_DLL
+void CPipeWrench::CheckPhysicalSwing(float speed)
+{
+	TraceResult tr;
+	UTIL_MakeVectors(m_pPlayer->GetWeaponViewAngles());
+	const Vector vecSrc = m_pPlayer->GetWeaponPosition();
+	const Vector vecEnd = vecSrc + gpGlobals->v_up * PIPEWRENCH_PHYSICAL_LENGTH;
+	UTIL_TraceLine(vecSrc, vecEnd, dont_ignore_monsters, ENT(m_pPlayer->pev), &tr);
+	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction >= 1.0f)
+		return;
+
+	CBaseEntity *pEntity = CBaseEntity::Instance(tr.pHit);
+	if (!pEntity || HasHitEntityThisSwing(pEntity))
+		return;
+	RememberHitEntityThisSwing(pEntity);
+	m_flPhysicalHitCount += 1.0f;
+	ClearMultiDamage();
+	pEntity->TraceAttack(m_pPlayer->pev, gSkillData.plrDmgPWrench * (speed / PIPEWRENCH_MIN_PHYSICAL_SWING_SPEED) /
+		m_flPhysicalHitCount, gpGlobals->v_up, &tr, DMG_CLUB);
+	ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
+
+	if (pEntity->Classify() != CLASS_NONE && pEntity->Classify() != CLASS_MACHINE)
+	{
+		const char *sounds[] = { "weapons/pwrench_hitbod1.wav", "weapons/pwrench_hitbod2.wav", "weapons/pwrench_hitbod3.wav" };
+		EMIT_SOUND(ENT(m_pPlayer->pev), CHAN_ITEM, sounds[RANDOM_LONG(0, 2)], 1, ATTN_NORM);
+		m_pPlayer->m_iWeaponVolume = MELEE_BODYHIT_VOLUME;
+	}
+	else
+	{
+		float volume = TEXTURETYPE_PlaySound(&tr, vecSrc, vecSrc + (vecEnd - vecSrc) * 2, BULLET_PLAYER_CROWBAR);
+		if (g_pGameRules->IsMultiplayer()) volume = 1.0f;
+		EMIT_SOUND_DYN(ENT(m_pPlayer->pev), CHAN_ITEM, RANDOM_LONG(0, 1) ?
+			"weapons/pwrench_hit1.wav" : "weapons/pwrench_hit2.wav", volume, ATTN_NORM, 0, 100);
+	}
+	DecalGunshot(&tr, BULLET_PLAYER_CROWBAR);
+	CLIENT_COMMAND(m_pPlayer->edict(), "vr_haptic 90 -1 1\n");
+}
+
+BOOL CPipeWrench::HasHitEntityThisSwing(CBaseEntity *pEntity)
+{
+	for (size_t i = 0; i < ARRAYSIZE(m_hPhysicalHitEntities); ++i)
+		if ((CBaseEntity *)m_hPhysicalHitEntities[i] == pEntity) return TRUE;
+	return FALSE;
+}
+
+void CPipeWrench::RememberHitEntityThisSwing(CBaseEntity *pEntity)
+{
+	for (size_t i = 0; i < ARRAYSIZE(m_hPhysicalHitEntities); ++i)
+		if (!m_hPhysicalHitEntities[i]) { m_hPhysicalHitEntities[i] = pEntity; return; }
+}
+
+void CPipeWrench::ClearPhysicalSwingState(void)
+{
+	m_fPhysicalSwinging = FALSE;
+	m_flPhysicalHitCount = 0.0f;
+	for (size_t i = 0; i < ARRAYSIZE(m_hPhysicalHitEntities); ++i) m_hPhysicalHitEntities[i] = NULL;
+}
+#endif
 
 void CPipeWrench::WeaponIdle(void)
 {
