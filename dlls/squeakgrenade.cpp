@@ -538,8 +538,15 @@ void CSqueak::PrimaryAttack()
 			// player "shoot" animation
 			m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 #if !CLIENT_DLL
-			CBaseEntity *pSqueak = CBaseEntity::Create( "monster_snark", tr.vecEndPos, m_pPlayer->pev->v_angle, m_pPlayer->edict() );
-			pSqueak->pev->velocity = forward * 200.0f + m_pPlayer->pev->velocity;
+			Vector spawnPosition = tr.vecEndPos;
+			Vector throwVelocity = forward * 200.0f + m_pPlayer->pev->velocity;
+			if( m_pPlayer->HasFreshVRPose() )
+			{
+				spawnPosition = m_pPlayer->GetWeaponPosition();
+				throwVelocity = m_pPlayer->GetWeaponVelocity() * 0.7f + m_pPlayer->pev->velocity;
+			}
+			CBaseEntity *pSqueak = CBaseEntity::Create( "monster_snark", spawnPosition, m_pPlayer->GetWeaponAngles(), m_pPlayer->edict() );
+			pSqueak->pev->velocity = throwVelocity;
 #endif
 			// play hunt sound
 			float flRndSound = RANDOM_FLOAT( 0.0f, 1.0f );

@@ -123,6 +123,7 @@ set (CLDLL_SOURCES
 	train.cpp
 	tri.cpp
 	util.cpp
+	vr_client.cpp
 	view.cpp
 	../public/safe_snprintf.c
 )

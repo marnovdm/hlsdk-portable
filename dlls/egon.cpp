@@ -173,9 +173,11 @@ void CEgon::Attack( void )
 		return;
 	}
 
-	UTIL_MakeVectors( m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle );
-	Vector vecAiming = gpGlobals->v_forward;
-	Vector vecSrc = m_pPlayer->GetGunPosition();
+	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+	Vector vecAiming = m_pPlayer->HasFreshVRPose()
+		? gpGlobals->v_forward
+		: m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
 
 	int flags;
 #if CLIENT_WEAPONS
@@ -382,6 +384,7 @@ void CEgon::UpdateEffect( const Vector &startPoint, const Vector &endPoint, floa
 	}
 
 	m_pBeam->SetStartPos( endPoint );
+	m_pBeam->SetEndPos( m_pPlayer->GetWeaponPosition() );
 	m_pBeam->SetBrightness( (int)( 255 - ( timeBlend * 180 )) );
 	m_pBeam->SetWidth( (int)( 40 - ( timeBlend * 20 ) ) );
 
@@ -396,6 +399,7 @@ void CEgon::UpdateEffect( const Vector &startPoint, const Vector &endPoint, floa
 		m_pSprite->pev->frame = 0;
 
 	m_pNoise->SetStartPos( endPoint );
+	m_pNoise->SetEndPos( m_pPlayer->GetWeaponPosition() );
 #endif
 }
 
@@ -405,27 +409,24 @@ void CEgon::CreateEffect( void )
 	DestroyEffect();
 
 	m_pBeam = CBeam::BeamCreate( EGON_BEAM_SPRITE, 40 );
-	m_pBeam->PointEntInit( pev->origin, m_pPlayer->entindex() );
+	m_pBeam->PointsInit( pev->origin, m_pPlayer->GetWeaponPosition() );
 	m_pBeam->SetFlags( BEAM_FSINE );
 	m_pBeam->SetEndAttachment( 1 );
 	m_pBeam->pev->spawnflags |= SF_BEAM_TEMPORARY;	// Flag these to be destroyed on save/restore or level transition
-	m_pBeam->pev->flags |= FL_SKIPLOCALHOST;
 	m_pBeam->pev->owner = m_pPlayer->edict();
 
 	m_pNoise = CBeam::BeamCreate( EGON_BEAM_SPRITE, 55 );
-	m_pNoise->PointEntInit( pev->origin, m_pPlayer->entindex() );
+	m_pNoise->PointsInit( pev->origin, m_pPlayer->GetWeaponPosition() );
 	m_pNoise->SetScrollRate( 25 );
 	m_pNoise->SetBrightness( 100 );
 	m_pNoise->SetEndAttachment( 1 );
 	m_pNoise->pev->spawnflags |= SF_BEAM_TEMPORARY;
-	m_pNoise->pev->flags |= FL_SKIPLOCALHOST;
 	m_pNoise->pev->owner = m_pPlayer->edict();
 
 	m_pSprite = CSprite::SpriteCreate( EGON_FLARE_SPRITE, pev->origin, FALSE );
 	m_pSprite->pev->scale = 1.0;
 	m_pSprite->SetTransparency( kRenderGlow, 255, 255, 255, 255, kRenderFxNoDissipation );
 	m_pSprite->pev->spawnflags |= SF_SPRITE_TEMPORARY;
-	m_pSprite->pev->flags |= FL_SKIPLOCALHOST;
 	m_pSprite->pev->owner = m_pPlayer->edict();
 
 	if( m_fireMode == FIRE_WIDE )

@@ -206,6 +206,18 @@ public:
 	virtual void PreThink( void );
 	virtual void PostThink( void );
 	virtual Vector GetGunPosition( void );
+	BOOL HasFreshVRPose( void ) const;
+	Vector GetWeaponPosition( void ) const;
+	Vector GetWeaponAngles( void ) const;
+	Vector GetWeaponViewAngles( void ) const;
+	Vector GetWeaponVelocity( void ) const;
+	Vector GetOffhandPosition( void ) const;
+	Vector GetOffhandAngles( void ) const;
+	BOOL IsWeaponUnderWater( void ) const;
+	BOOL UpdateVRPose( const Vector &weaponPosition, const Vector &weaponAngles,
+		const Vector &weaponVelocity, const Vector &offhandPosition, const Vector &offhandAngles );
+	void ClearVRPose( void );
+	void SetVRUse2State( BOOL down );
 	virtual int TakeHealth( float flHealth, int bitsDamageType );
 	virtual void TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
 	virtual int TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType);
@@ -329,6 +341,30 @@ public:
 	int m_iAutoWepSwitch;
 
 	Vector m_vecLastViewAngles;
+
+private:
+	Vector m_vecVRWeaponPosition;
+	Vector m_vecVRWeaponAngles;
+	Vector m_vecVRWeaponVelocity;
+	Vector m_vecVROffhandPosition;
+	Vector m_vecVROffhandAngles;
+	float m_flVRPoseTime;
+	BOOL m_bVRUse2;
+	BOOL m_bVRUse2Pressed;
+	BOOL m_bVRUse2Released;
+	EHANDLE m_hLastLocalUsableEntity;
+	EHANDLE m_hLastLocalUsableEntityAlt;
+	int m_iLastLocalUsableEntityRenderMode;
+	int m_iLastLocalUsableEntityRenderFX;
+	int m_iLastLocalUsableEntityRenderAmount;
+	int m_iLastLocalUsableEntityAltRenderMode;
+	int m_iLastLocalUsableEntityAltRenderFX;
+	int m_iLastLocalUsableEntityAltRenderAmount;
+
+	void ClearVRUse2State( void );
+	void ClearActionableHighlights( void );
+	void PlayerUseInternal( BOOL highlightActionables, const Vector &handOrigin,
+		const Vector &handAngles, BOOL useActive, BOOL usePressed, BOOL useReleased, BOOL offhand );
 };
 
 #define AUTOAIM_2DEGREES  0.0348994967025

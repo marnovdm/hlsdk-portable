@@ -41,6 +41,8 @@ cvar_t explosionfix	= { "explosionfix", "0", FCVAR_SERVER };
 cvar_t monsteryawspeedfix	= { "monsteryawspeedfix", "1", FCVAR_SERVER };
 cvar_t corpsephysics = { "corpsephysics", "0", FCVAR_SERVER };
 cvar_t pushablemode = { "pushablemode", "0", FCVAR_SERVER };
+cvar_t vr_highlight_actionables = { "vr_highlight_actionables", "1", FCVAR_SERVER };
+cvar_t vr_gesture_triggered_use = { "vr_gesture_triggered_use", "1", FCVAR_SERVER };
 cvar_t forcerespawn	= { "mp_forcerespawn","1", FCVAR_SERVER };
 cvar_t flashlight	= { "mp_flashlight","0", FCVAR_SERVER };
 cvar_t aimcrosshair	= { "mp_autocrosshair","1", FCVAR_SERVER };
@@ -499,6 +501,8 @@ void GameDLLInit( void )
 	CVAR_REGISTER( &monsteryawspeedfix );
 	CVAR_REGISTER( &corpsephysics );
 	CVAR_REGISTER( &pushablemode );
+	CVAR_REGISTER( &vr_highlight_actionables );
+	CVAR_REGISTER( &vr_gesture_triggered_use );
 	CVAR_REGISTER( &forcerespawn );
 	CVAR_REGISTER( &flashlight );
 	CVAR_REGISTER( &aimcrosshair );
@@ -893,4 +897,3 @@ void GameDLLInit( void )
 
 	SERVER_COMMAND( "exec skill.cfg\n" );
 }
-

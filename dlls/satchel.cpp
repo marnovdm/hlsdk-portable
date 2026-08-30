@@ -443,9 +443,11 @@ void CSatchel::Throw( void )
 	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] )
 	{
 #if !CLIENT_DLL
-		Vector vecSrc = m_pPlayer->pev->origin;
-
-		Vector vecThrow = gpGlobals->v_forward * 274 + m_pPlayer->pev->velocity;
+		UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
+		Vector vecSrc = m_pPlayer->GetWeaponPosition();
+		Vector vecThrow = m_pPlayer->HasFreshVRPose()
+			? m_pPlayer->GetWeaponVelocity() * 0.4f + m_pPlayer->pev->velocity
+			: gpGlobals->v_forward * 274 + m_pPlayer->pev->velocity;
 
 		CBaseEntity *pSatchel = Create( "monster_satchel", vecSrc, Vector( 0, 0, 0 ), m_pPlayer->edict() );
 		pSatchel->pev->velocity = vecThrow;

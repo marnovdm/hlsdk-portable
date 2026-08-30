@@ -31,6 +31,7 @@
 #include "../hud_iface.h"
 #include "../com_weapons.h"
 #include "../demo.h"
+#include "../vr_client.h"
 
 extern globalvars_t *gpGlobals;
 extern int g_iUser1;
@@ -260,9 +261,137 @@ Put away weapon
 */
 void CBasePlayerWeapon::Holster( int skiplocal /* = 0 */ )
 { 
+	KillLaser();
+
 	m_fInReload = FALSE; // cancel any reload in progress.
 	g_irunninggausspred = false;
 	m_pPlayer->pev->viewmodel = 0; 
+}
+
+// vr_lasersight is an archive cvar local to each client.  Keeping these effects
+// client-side means a player's choice cannot affect any other player on a server.
+static BEAM *g_pLaserSightBeam;
+static TEMPENTITY *g_pLaserSightDot;
+static float g_flLaserSightExpiry;
+static float g_flLaserSightLastUpdate;
+
+static void TraceLaserSight( const Vector &vecSrc, const Vector &vecEnd, pmtrace_t *pTrace )
+{
+	cl_entity_t *pLocalPlayer = gEngfuncs.GetLocalPlayer();
+	Vector traceSrc = vecSrc;
+	Vector traceEnd = vecEnd;
+
+	memset( pTrace, 0, sizeof( *pTrace ) );
+	pTrace->fraction = 1.0f;
+	pTrace->endpos[0] = vecEnd.x;
+	pTrace->endpos[1] = vecEnd.y;
+	pTrace->endpos[2] = vecEnd.z;
+	if( !pLocalPlayer )
+		return;
+
+	gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
+	gEngfuncs.pEventAPI->EV_PushPMStates();
+	gEngfuncs.pEventAPI->EV_SetSolidPlayers( pLocalPlayer->index - 1 );
+	gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+	gEngfuncs.pEventAPI->EV_PlayerTrace( traceSrc, traceEnd, PM_NORMAL, -1, pTrace );
+	gEngfuncs.pEventAPI->EV_PopPMStates();
+}
+
+void CBasePlayerWeapon::KillLaser( void )
+{
+	const float flTime = gEngfuncs.GetClientTime();
+
+	// Do not dereference an expired (or pre-map-change) temp-effect pointer.
+	if( flTime >= g_flLaserSightLastUpdate && flTime < g_flLaserSightExpiry )
+	{
+		if( g_pLaserSightBeam )
+			g_pLaserSightBeam->die = 0.0f;
+		if( g_pLaserSightDot )
+			g_pLaserSightDot->die = 0.0f;
+	}
+
+	g_pLaserSightBeam = NULL;
+	g_pLaserSightDot = NULL;
+	g_flLaserSightExpiry = 0.0f;
+	g_flLaserSightLastUpdate = flTime;
+}
+
+void CBasePlayerWeapon::MakeLaser( void )
+{
+	const int iMode = (int)CVAR_GET_FLOAT( "vr_lasersight" );
+	const float flTime = gEngfuncs.GetClientTime();
+
+	// The RPG owns its guidance dot; do not add a second, independent sight.
+	if( !m_pPlayer || m_iId == WEAPON_RPG || iMode < 1 || iMode > 2 )
+	{
+		KillLaser();
+		return;
+	}
+
+	// Effects must only be emitted once for a predicted command.
+	if( !g_runfuncs )
+		return;
+
+	Vector vecAngles = m_pPlayer->GetWeaponViewAngles();
+	UTIL_MakeVectors( vecAngles );
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
+	Vector vecEnd = vecSrc + gpGlobals->v_forward * ( iMode == 1 ? 2048.0f : 8192.0f );
+	pmtrace_t trace;
+	TraceLaserSight( vecSrc, vecEnd, &trace );
+
+	const int iModelIndex = gEngfuncs.pEventAPI->EV_FindModelIndex(
+		iMode == 1 ? "sprites/laserbeam.spr" : "sprites/laserdot.spr" );
+	if( iModelIndex <= 0 )
+	{
+		KillLaser();
+		return;
+	}
+
+	const float flLifetime = 0.1f;
+	const BOOL bEffectIsCurrent = flTime >= g_flLaserSightLastUpdate && flTime < g_flLaserSightExpiry;
+
+	if( iMode == 1 )
+	{
+		if( g_pLaserSightDot && bEffectIsCurrent )
+			g_pLaserSightDot->die = 0.0f;
+		g_pLaserSightDot = NULL;
+
+		if( !g_pLaserSightBeam || !bEffectIsCurrent )
+		{
+			g_pLaserSightBeam = gEngfuncs.pEfxAPI->R_BeamPoints( vecSrc, trace.endpos,
+				iModelIndex, flLifetime, 3.0f, 0.0f, 96.0f / 255.0f, 255.0f, 0, 0.0f,
+				214.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f );
+		}
+		else
+		{
+			g_pLaserSightBeam->source = vecSrc;
+			g_pLaserSightBeam->target = trace.endpos;
+			g_pLaserSightBeam->die = flTime + flLifetime;
+		}
+	}
+	else
+	{
+		Vector vecZero;
+
+		if( g_pLaserSightBeam && bEffectIsCurrent )
+			g_pLaserSightBeam->die = 0.0f;
+		g_pLaserSightBeam = NULL;
+
+		if( !g_pLaserSightDot || !bEffectIsCurrent )
+		{
+			g_pLaserSightDot = gEngfuncs.pEfxAPI->R_TempSprite( trace.endpos, vecZero,
+				0.5f, iModelIndex, kRenderGlow, kRenderFxNoDissipation, 1.0f, flLifetime,
+				FTENT_SPRCYCLE | FTENT_PERSIST );
+		}
+		else
+		{
+			g_pLaserSightDot->entity.origin = trace.endpos;
+			g_pLaserSightDot->die = flTime + flLifetime;
+		}
+	}
+
+	g_flLaserSightExpiry = flTime + flLifetime;
+	g_flLaserSightLastUpdate = flTime;
 }
 
 /*
@@ -323,6 +452,8 @@ Handles weapon firing, reloading, etc.
 */
 void CBasePlayerWeapon::ItemPostFrame( void )
 {
+	MakeLaser();
+
 	if( ( m_fInReload ) && ( m_pPlayer->m_flNextAttack <= 0.0f ) )
 	{
 #if 1
@@ -667,6 +798,8 @@ Run Weapon firing code on client
 */
 void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cmd, double time, unsigned int random_seed )
 {
+	VR_UpdateCurrentWeapon( to->client.m_iId );
+
 	int i;
 	int buttonsChanged;
 	CBasePlayerWeapon *pWeapon = NULL;

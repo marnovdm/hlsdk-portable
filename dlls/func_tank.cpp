@@ -488,8 +488,8 @@ void CFuncTank::TrackTarget( void )
 	// Get a position to aim for
 	if( m_pController )
 	{
-		// Tanks attempt to mirror the player's angles
-		angles = m_pController->pev->v_angle;
+		// Tanks mirror the controller pose when it is fresh, otherwise view angles.
+		angles = m_pController->GetWeaponViewAngles();
 		angles[0] = 0 - angles[0];
 		pev->nextthink = pev->ltime + 0.05f;
 	}

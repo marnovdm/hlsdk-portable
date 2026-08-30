@@ -22,6 +22,7 @@
 #include "cl_util.h"
 #include "netadr.h"
 #include "parsemsg.h"
+#include "vr_client.h"
 
 #if USE_VGUI
 #include "vgui_int.h"
@@ -290,6 +291,7 @@ void DLLEXPORT HUD_Init( void )
 {
 	InitInput();
 	gHUD.Init();
+	VR_Init();
 #if USE_VGUI
 	Scheme_Init();
 #endif
@@ -342,6 +344,7 @@ Called at start and end of demos to restore to "non"HUD state.
 void DLLEXPORT HUD_Reset( void )
 {
 	gHUD.VidInit();
+	VR_Reset();
 }
 
 /*
