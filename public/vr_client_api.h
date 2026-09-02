@@ -14,6 +14,8 @@ the Free Software Foundation, either version 3 of the License, or
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct vr_usercmd_sidecar_s vr_usercmd_sidecar_t;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -95,12 +97,28 @@ typedef struct vr_client_engine_api_s
 typedef void (VR_CLIENT_CALL *vr_client_frame_callback_t)( const vr_client_frame_t *frame );
 typedef void (VR_CLIENT_CALL *vr_client_shutdown_t)( void );
 
+/* This deliberately contains only the final usercmd values required to make a
+ * sidecar. It is not usercmd_t and does not expose an engine ABI. */
+typedef struct vr_client_usercmd_s
+{
+	uint32_t struct_size;
+	float viewangles[3];
+	float frametime;
+} vr_client_usercmd_t;
+
+/* Return nonzero only after filling the pose fields and setting POSE_VALID.
+ * The engine owns the ladder fields and preserves them around this callback. */
+typedef int32_t (VR_CLIENT_CALL *vr_client_build_usercmd_sidecar_t)(
+	const vr_client_usercmd_t *cmd, vr_usercmd_sidecar_t *sample );
+
 typedef struct vr_client_api_s
 {
 	uint32_t version;
 	uint32_t struct_size;
 	vr_client_frame_callback_t Frame;
 	vr_client_shutdown_t Shutdown;
+	/* Optional v2 tail; available only when struct_size reaches this field. */
+	vr_client_build_usercmd_sidecar_t BuildUsercmdSidecar;
 } vr_client_api_t;
 
 /* Return nonzero only after writing a compatible vr_client_api_t. */
@@ -108,6 +126,8 @@ typedef int32_t (VR_CLIENT_CALL *vr_client_get_api_t)( const vr_client_engine_ap
 
 #define VR_CLIENT_ENGINE_API_MIN_SIZE ( offsetof( vr_client_engine_api_t, Haptic ) + sizeof( vr_client_haptic_t ))
 #define VR_CLIENT_API_MIN_SIZE ( offsetof( vr_client_api_t, Shutdown ) + sizeof( vr_client_shutdown_t ))
+#define VR_CLIENT_API_SIDECAR_SIZE ( offsetof( vr_client_api_t, BuildUsercmdSidecar ) + sizeof( vr_client_build_usercmd_sidecar_t ))
+#define VR_CLIENT_USERCMD_MIN_SIZE ( offsetof( vr_client_usercmd_t, frametime ) + sizeof( float ))
 
 /* The public ABI is intentionally independent of engine, renderer, and
  * OpenXR headers. Keep these i386 Linux checks when extending v2. */
@@ -119,8 +139,10 @@ VR_CLIENT_STATIC_ASSERT( frame_size, sizeof( vr_client_frame_t ) == 360 );
 VR_CLIENT_STATIC_ASSERT( frame_hands_offset, offsetof( vr_client_frame_t, hands ) == 72 );
 VR_CLIENT_STATIC_ASSERT( engine_api_size, sizeof( vr_client_engine_api_t ) == 12 );
 VR_CLIENT_STATIC_ASSERT( engine_api_haptic_offset, offsetof( vr_client_engine_api_t, Haptic ) == 8 );
-VR_CLIENT_STATIC_ASSERT( client_api_size, sizeof( vr_client_api_t ) == 16 );
+VR_CLIENT_STATIC_ASSERT( client_api_size, sizeof( vr_client_api_t ) == 20 );
 VR_CLIENT_STATIC_ASSERT( client_api_frame_offset, offsetof( vr_client_api_t, Frame ) == 8 );
+VR_CLIENT_STATIC_ASSERT( client_api_sidecar_offset, offsetof( vr_client_api_t, BuildUsercmdSidecar ) == 16 );
+VR_CLIENT_STATIC_ASSERT( client_usercmd_size, sizeof( vr_client_usercmd_t ) == 20 );
 #undef VR_CLIENT_STATIC_ASSERT
 #endif
 
