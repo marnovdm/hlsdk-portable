@@ -25,6 +25,7 @@
 #include "eventscripts.h"
 #include "event_api.h"
 #include "pm_shared.h"
+#include "vr_client.h"
 
 #define IS_FIRSTPERSON_SPEC ( g_iUser1 == OBS_IN_EYE || ( g_iUser1 && ( gHUD.m_Spectator.m_pip->value == INSET_IN_EYE ) ) )
 /*
@@ -105,7 +106,7 @@ void EV_GetWeaponEventPose( event_args_t *args, float *origin, float *angles, fl
 	if( velocity )
 		VectorCopy( args->velocity, velocity );
 
-	if( !EV_IsLocal( args->entindex ) || !( viewmodel = GetViewEntity() ) )
+	if( !VR_IsActive() || !EV_IsLocal( args->entindex ) || !( viewmodel = GetViewEntity() ) )
 		return;
 
 	if( origin )
@@ -132,7 +133,7 @@ void EV_GetGunPosition( event_args_t *args, float *pos, float *origin )
 	vec3_t view_ofs;
 
 	idx = args->entindex;
-	if( EV_IsLocal( idx ) )
+	if( VR_IsActive() && EV_IsLocal( idx ) )
 	{
 		cl_entity_t *viewmodel = GetViewEntity();
 		if( viewmodel )
@@ -211,7 +212,7 @@ void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity,
 
 	fR = gEngfuncs.pfnRandomFloat( 50, 70 );
 	fU = gEngfuncs.pfnRandomFloat( 100, 150 );
-	if( EV_IsLocal( idx ) )
+	if( VR_IsActive() && EV_IsLocal( idx ) )
 	{
 		cl_entity_t *viewmodel = GetViewEntity();
 		if( viewmodel )
