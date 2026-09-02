@@ -1817,7 +1817,6 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 
 	EHANDLE *lastHandle = offhand ? &m_hLastLocalUsableEntityAlt : &m_hLastLocalUsableEntity;
 	BOOL *usingEntity = offhand ? &m_bVRUsingEntityAlt : &m_bVRUsingEntity;
-	static BOOL itemUsedHaptic = FALSE;
 
 	if( highlightActionables )
 	{
@@ -1831,6 +1830,8 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	{
 		const int caps = pObject->ObjectCaps();
 		BOOL usingObject = FALSE;
+		const BOOL itemUsedHaptic = useActive &&
+			( caps & ( FCAP_IMPULSE_USE | FCAP_ONOFF_USE ) );
 
 		if( usePressed )
 			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_select.wav", 0.4, ATTN_NORM );
@@ -1846,17 +1847,13 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 					sin( gpGlobals->time * 12.0f ) * 0.6f );
 			}
 			else
-			{
 				CLIENT_COMMAND( edict(), "vr_haptic 250 %d 1\n", hapticHand );
-				itemUsedHaptic = TRUE;
-			}
 			pObject->Use( this, this, USE_SET, 1 );
 		}
 		else if( useReleased )
 		{
 			if( caps & FCAP_ONOFF_USE )
 				pObject->Use( this, this, USE_SET, 0 );
-			itemUsedHaptic = FALSE;
 		}
 
 		if( highlightActionables && pObject->pev->movetype != MOVETYPE_PUSHSTEP &&
@@ -1870,7 +1867,6 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	}
 	else
 	{
-		itemUsedHaptic = FALSE;
 		if( usePressed )
 			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_denyselect.wav", 0.4, ATTN_NORM );
 	}
