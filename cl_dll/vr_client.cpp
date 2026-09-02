@@ -388,7 +388,8 @@ static int VR_ResolveWeaponPose( float bodyYaw, float frametime, vr_weapon_pose_
 	separationMinimum = g_vrFrame.world_scale > 0.0f ? g_vrFrame.world_scale * 0.15f : 1.0f;
 	separationMaximum = g_vrFrame.world_scale > 0.0f ? g_vrFrame.world_scale * 0.50f : 20.0f;
 	separationLength = separation.Length();
-	pose->stabilised = ( support->flags & VR_CLIENT_HAND_AIM_VALID ) && support->squeeze >= 0.7f &&
+	pose->stabilised = ( support->flags & VR_CLIENT_HAND_AIM_VALID ) &&
+		( support->flags & VR_CLIENT_HAND_SQUEEZE_PRESSED ) &&
 		separationLength > separationMinimum && separationLength < separationMaximum;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", pose->stabilised ? 1.0f : 0.0f );
 	if( pose->stabilised )
