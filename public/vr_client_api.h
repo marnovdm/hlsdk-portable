@@ -86,12 +86,17 @@ typedef struct vr_client_frame_s
 } vr_client_frame_t;
 
 typedef int32_t (VR_CLIENT_CALL *vr_client_haptic_t)( uint32_t hand, float duration, float frequency, float amplitude );
+/* Reports whether the current connection negotiated VR usercmd sidecars.
+ * This is optional so newer clients retain the updatevr fallback on old engines. */
+typedef int32_t (VR_CLIENT_CALL *vr_client_usercmd_sidecar_negotiated_t)( void );
 
 typedef struct vr_client_engine_api_s
 {
 	uint32_t version;
 	uint32_t struct_size;
 	vr_client_haptic_t Haptic;
+	/* Optional v2 tail; query it for each update rather than caching capability. */
+	vr_client_usercmd_sidecar_negotiated_t IsUsercmdSidecarNegotiated;
 } vr_client_engine_api_t;
 
 typedef void (VR_CLIENT_CALL *vr_client_frame_callback_t)( const vr_client_frame_t *frame );
@@ -125,6 +130,7 @@ typedef struct vr_client_api_s
 typedef int32_t (VR_CLIENT_CALL *vr_client_get_api_t)( const vr_client_engine_api_t *engine, vr_client_api_t *client );
 
 #define VR_CLIENT_ENGINE_API_MIN_SIZE ( offsetof( vr_client_engine_api_t, Haptic ) + sizeof( vr_client_haptic_t ))
+#define VR_CLIENT_ENGINE_API_NEGOTIATION_SIZE ( offsetof( vr_client_engine_api_t, IsUsercmdSidecarNegotiated ) + sizeof( vr_client_usercmd_sidecar_negotiated_t ))
 #define VR_CLIENT_API_MIN_SIZE ( offsetof( vr_client_api_t, Shutdown ) + sizeof( vr_client_shutdown_t ))
 #define VR_CLIENT_API_SIDECAR_SIZE ( offsetof( vr_client_api_t, BuildUsercmdSidecar ) + sizeof( vr_client_build_usercmd_sidecar_t ))
 #define VR_CLIENT_USERCMD_MIN_SIZE ( offsetof( vr_client_usercmd_t, frametime ) + sizeof( float ))
@@ -137,8 +143,9 @@ VR_CLIENT_STATIC_ASSERT( pose_size, sizeof( vr_client_pose_t ) == 48 );
 VR_CLIENT_STATIC_ASSERT( hand_size, sizeof( vr_client_hand_t ) == 144 );
 VR_CLIENT_STATIC_ASSERT( frame_size, sizeof( vr_client_frame_t ) == 360 );
 VR_CLIENT_STATIC_ASSERT( frame_hands_offset, offsetof( vr_client_frame_t, hands ) == 72 );
-VR_CLIENT_STATIC_ASSERT( engine_api_size, sizeof( vr_client_engine_api_t ) == 12 );
+VR_CLIENT_STATIC_ASSERT( engine_api_size, sizeof( vr_client_engine_api_t ) == 16 );
 VR_CLIENT_STATIC_ASSERT( engine_api_haptic_offset, offsetof( vr_client_engine_api_t, Haptic ) == 8 );
+VR_CLIENT_STATIC_ASSERT( engine_api_sidecar_negotiated_offset, offsetof( vr_client_engine_api_t, IsUsercmdSidecarNegotiated ) == 12 );
 VR_CLIENT_STATIC_ASSERT( client_api_size, sizeof( vr_client_api_t ) == 20 );
 VR_CLIENT_STATIC_ASSERT( client_api_frame_offset, offsetof( vr_client_api_t, Frame ) == 8 );
 VR_CLIENT_STATIC_ASSERT( client_api_sidecar_offset, offsetof( vr_client_api_t, BuildUsercmdSidecar ) == 16 );
