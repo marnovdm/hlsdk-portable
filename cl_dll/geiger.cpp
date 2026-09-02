@@ -20,6 +20,7 @@
 
 #include "hud.h"
 #include "cl_util.h"
+#include "vr_client.h"
 #include <string.h>
 #include <time.h>
 #include <stdio.h>
@@ -176,6 +177,7 @@ int CHudGeiger::Draw( float flTime )
 
 			sprintf( sz, "player/geiger%d.wav", j + 1 );
 			PlaySound( sz, flvol );
+			VR_Haptic( 50.0f, (unsigned int)VR_GetDominantHand(), pct / 100.0f );
 		}
 	}
 

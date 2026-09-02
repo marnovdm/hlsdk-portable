@@ -477,6 +477,9 @@ void CDisplacer::WeaponIdle(void)
 //=========================================================
 void CDisplacer::ClearSpin( void )
 {
+	CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 0 -1 0\n" );
+	if( (int)CVAR_GET_FLOAT( "vr_weapon_stabilised" ) == 1 )
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 0 -2 0\n" );
 
 	switch (m_iFireMode)
 	{
@@ -510,6 +513,10 @@ void CDisplacer::SpinUp( void )
 	}
 	pev->nextthink = gpGlobals->time + 0.9;
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.3;
+
+	CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic -1 -1 0.3\n" );
+	if( (int)CVAR_GET_FLOAT( "vr_weapon_stabilised" ) == 1 )
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic -1 -2 0.2\n" );
 }
 
 //=========================================================
@@ -543,6 +550,9 @@ void CDisplacer::Displace( void )
 
 	SetThink( NULL );
 #endif
+	CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 120 -1 1\n" );
+	if( (int)CVAR_GET_FLOAT( "vr_weapon_stabilised" ) == 1 )
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 120 -2 0.8\n" );
 }
 
 //=========================================================
@@ -612,12 +622,18 @@ void CDisplacer::Teleport( void )
 			else
 				m_pPlayer->pev->gravity = 1.0;
 		}
+
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 500 1 1\n" );
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 500 0 1\n" );
 	}
 	else
 	{
 		EMIT_SOUND( m_pPlayer->edict(), CHAN_WEAPON, "buttons/button11.wav", 0.9f, ATTN_NORM );
 		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 3.0;
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.9;
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 0 -1 0\n" );
+		if( (int)CVAR_GET_FLOAT( "vr_weapon_stabilised" ) == 1 )
+			CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 0 -2 0\n" );
 	}
 
 	SetThink( NULL );
