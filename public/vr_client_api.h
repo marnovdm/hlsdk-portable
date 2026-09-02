@@ -43,6 +43,8 @@ extern "C"
 /* vr_client_hand_t flags */
 #define VR_CLIENT_HAND_GRIP_VALID ( 1u << 0 )
 #define VR_CLIENT_HAND_AIM_VALID  ( 1u << 1 )
+/* Normalized renderer squeeze state; raw analog squeeze remains available. */
+#define VR_CLIENT_HAND_SQUEEZE_PRESSED ( 1u << 2 )
 
 /* vr_client_hand_t buttons */
 #define VR_CLIENT_BUTTON_PRIMARY   ( 1u << 0 )
