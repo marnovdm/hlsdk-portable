@@ -467,26 +467,28 @@ BOOL CBasePlayer::IsWeaponUnderWater( void ) const
 	return pev->waterlevel == 3;
 }
 
-static void VR_RestoreActionableHighlight( EHANDLE &handle, int renderMode, int renderFX, int renderAmount )
-{
-	CBaseEntity *entity = handle;
-	if( entity )
-	{
-		entity->pev->rendermode = renderMode;
-		entity->pev->renderfx = renderFX;
-		entity->pev->renderamt = renderAmount;
-	}
-	handle = (CBaseEntity *)NULL;
-}
-
 void CBasePlayer::ClearActionableHighlights( void )
 {
-	VR_RestoreActionableHighlight( m_hLastLocalUsableEntity,
-		m_iLastLocalUsableEntityRenderMode, m_iLastLocalUsableEntityRenderFX,
-		m_iLastLocalUsableEntityRenderAmount );
-	VR_RestoreActionableHighlight( m_hLastLocalUsableEntityAlt,
-		m_iLastLocalUsableEntityAltRenderMode, m_iLastLocalUsableEntityAltRenderFX,
-		m_iLastLocalUsableEntityAltRenderAmount );
+	m_hLastLocalUsableEntity = (CBaseEntity *)NULL;
+	m_hLastLocalUsableEntityAlt = (CBaseEntity *)NULL;
+	m_bVRUsingEntity = FALSE;
+	m_bVRUsingEntityAlt = FALSE;
+}
+
+int CBasePlayer::VRHighlightMode( const CBaseEntity *entity )
+{
+	CBaseEntity *primaryEntity = m_hLastLocalUsableEntity;
+	CBaseEntity *offhandEntity = m_hLastLocalUsableEntityAlt;
+
+	if( !entity )
+		return 0;
+	if( primaryEntity == entity && m_bVRUsingEntity )
+		return 2;
+	if( offhandEntity == entity && m_bVRUsingEntityAlt )
+		return 2;
+	if( primaryEntity == entity || offhandEntity == entity )
+		return 1;
+	return 0;
 }
 
 void CBasePlayer::ClearVRUse2State( void )
@@ -1810,13 +1812,13 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	pObject = pClosest;
 
 	EHANDLE *lastHandle = offhand ? &m_hLastLocalUsableEntityAlt : &m_hLastLocalUsableEntity;
-	EHANDLE *otherHandle = offhand ? &m_hLastLocalUsableEntity : &m_hLastLocalUsableEntityAlt;
-	int *lastRenderMode = offhand ? &m_iLastLocalUsableEntityAltRenderMode : &m_iLastLocalUsableEntityRenderMode;
-	int *lastRenderFX = offhand ? &m_iLastLocalUsableEntityAltRenderFX : &m_iLastLocalUsableEntityRenderFX;
-	int *lastRenderAmount = offhand ? &m_iLastLocalUsableEntityAltRenderAmount : &m_iLastLocalUsableEntityRenderAmount;
+	BOOL *usingEntity = offhand ? &m_bVRUsingEntityAlt : &m_bVRUsingEntity;
 
 	if( highlightActionables )
-		VR_RestoreActionableHighlight( *lastHandle, *lastRenderMode, *lastRenderFX, *lastRenderAmount );
+	{
+		*lastHandle = (CBaseEntity *)NULL;
+		*usingEntity = FALSE;
+	}
 
 	TraceResult tr;
 	UTIL_TraceLine( handOrigin, EyePosition(), ignore_monsters, edict(), &tr );
@@ -1849,17 +1851,8 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 		if( highlightActionables && pObject->pev->movetype != MOVETYPE_PUSHSTEP &&
 			pObject->Classify() != CLASS_HUMAN_PASSIVE && pObject->Classify() != CLASS_PLAYER_ALLY )
 		{
-			CBaseEntity *otherEntity = *otherHandle;
-			if( otherEntity != pObject )
-			{
-				*lastHandle = pObject;
-				*lastRenderMode = pObject->pev->rendermode;
-				*lastRenderFX = pObject->pev->renderfx;
-				*lastRenderAmount = pObject->pev->renderamt;
-				pObject->pev->renderfx = usingObject ? kRenderFxNoDissipation : kRenderFxPulseFast;
-				pObject->pev->rendermode = kRenderGlow;
-				pObject->pev->renderamt = 192;
-			}
+			*lastHandle = pObject;
+			*usingEntity = usingObject;
 		}
 	}
 	else if( usePressed )

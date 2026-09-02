@@ -229,6 +229,7 @@ public:
 		const Vector &weaponVelocity, const Vector &offhandPosition, const Vector &offhandAngles );
 	void ClearVRPose( void );
 	void SetVRUse2State( BOOL down );
+	int VRHighlightMode( const CBaseEntity *entity );
 	virtual int TakeHealth( float flHealth, int bitsDamageType );
 	virtual void TraceAttack( entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
 	virtual int TakeDamage( entvars_t* pevInflictor, entvars_t* pevAttacker, float flDamage, int bitsDamageType);
@@ -430,12 +431,8 @@ private:
 	BOOL m_bVRUse2Released;
 	EHANDLE m_hLastLocalUsableEntity;
 	EHANDLE m_hLastLocalUsableEntityAlt;
-	int m_iLastLocalUsableEntityRenderMode;
-	int m_iLastLocalUsableEntityRenderFX;
-	int m_iLastLocalUsableEntityRenderAmount;
-	int m_iLastLocalUsableEntityAltRenderMode;
-	int m_iLastLocalUsableEntityAltRenderFX;
-	int m_iLastLocalUsableEntityAltRenderAmount;
+	BOOL m_bVRUsingEntity;
+	BOOL m_bVRUsingEntityAlt;
 
 	void ClearVRUse2State( void );
 	void ClearActionableHighlights( void );
