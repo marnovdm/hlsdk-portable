@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vr_client_api.h"
+#include "vr_usercmd_sidecar.h"
 
 struct ref_params_s;
 
