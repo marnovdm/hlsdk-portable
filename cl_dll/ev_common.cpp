@@ -94,6 +94,31 @@ qboolean EV_IsLocal( int idx )
 		return gEngfuncs.pEventAPI->EV_IsLocal( idx - 1 ) ? true : false;
 }
 
+void EV_GetWeaponEventPose( event_args_t *args, float *origin, float *angles, float *velocity )
+{
+	cl_entity_t *viewmodel;
+
+	if( origin )
+		VectorCopy( args->origin, origin );
+	if( angles )
+		VectorCopy( args->angles, angles );
+	if( velocity )
+		VectorCopy( args->velocity, velocity );
+
+	if( !EV_IsLocal( args->entindex ) || !( viewmodel = GetViewEntity() ) )
+		return;
+
+	if( origin )
+		VectorCopy( viewmodel->curstate.origin, origin );
+	if( angles )
+	{
+		VectorCopy( viewmodel->curstate.angles, angles );
+		angles[0] = -angles[0];
+	}
+	if( velocity )
+		VectorCopy( viewmodel->curstate.velocity, velocity );
+}
+
 /*
 =================
 EV_GetGunPosition
@@ -107,6 +132,15 @@ void EV_GetGunPosition( event_args_t *args, float *pos, float *origin )
 	vec3_t view_ofs;
 
 	idx = args->entindex;
+	if( EV_IsLocal( idx ) )
+	{
+		cl_entity_t *viewmodel = GetViewEntity();
+		if( viewmodel )
+		{
+			VectorCopy( viewmodel->curstate.origin, pos );
+			return;
+		}
+	}
 
 	VectorClear( view_ofs );
 	view_ofs[2] = DEFAULT_VIEWHEIGHT;
@@ -177,6 +211,19 @@ void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity,
 
 	fR = gEngfuncs.pfnRandomFloat( 50, 70 );
 	fU = gEngfuncs.pfnRandomFloat( 100, 150 );
+	if( EV_IsLocal( idx ) )
+	{
+		cl_entity_t *viewmodel = GetViewEntity();
+		if( viewmodel )
+		{
+			for( i = 0; i < 3; i++ )
+			{
+				ShellVelocity[i] = viewmodel->curstate.velocity[i] + right[i] * fR + up[i] * fU + forward[i] * 25;
+				ShellOrigin[i] = viewmodel->curstate.origin[i] + up[i] * upScale + forward[i] * forwardScale + right[i] * rightScale;
+			}
+			return;
+		}
+	}
 
 	for( i = 0; i < 3; i++ )
 	{
