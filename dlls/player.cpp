@@ -1797,6 +1797,7 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	const BOOL gestureUse = CVAR_GET_FLOAT( "vr_gesture_triggered_use" ) == 1.0f;
 	const float searchRadius = gestureUse ? PLAYER_HAND_GESTURE_SEARCH_RADIUS : PLAYER_HAND_SEARCH_RADIUS;
 	float flMaxDot = gestureUse ? 0.0f : VIEW_FIELD_NARROW;
+	const int hapticHand = offhand ? -2 : -1;
 
 	UTIL_MakeVectors( handAngles );
 	while( ( pObject = UTIL_FindEntityInSphere( pObject, handOrigin, searchRadius ) ) != NULL )
@@ -1829,12 +1830,11 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	{
 		const int caps = pObject->ObjectCaps();
 		BOOL usingObject = FALSE;
+		const BOOL itemUsedHaptic = useActive &&
+			( caps & ( FCAP_IMPULSE_USE | FCAP_ONOFF_USE ) );
 
 		if( usePressed )
-		{
 			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_select.wav", 0.4, ATTN_NORM );
-			CLIENT_COMMAND( edict(), "vr_haptic 120 %d 0.8\n", offhand ? -2 : -1 );
-		}
 
 		if( ( useActive && ( caps & FCAP_CONTINUOUS_USE ) ) ||
 			( usePressed && ( caps & ( FCAP_IMPULSE_USE | FCAP_ONOFF_USE ) ) ) )
@@ -1843,12 +1843,17 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 			{
 				m_afPhysicsFlags |= PFLAG_USING;
 				usingObject = TRUE;
+				CLIENT_COMMAND( edict(), "vr_haptic 10 %d %f\n", hapticHand,
+					sin( gpGlobals->time * 12.0f ) * 0.6f );
 			}
+			else
+				CLIENT_COMMAND( edict(), "vr_haptic 250 %d 1\n", hapticHand );
 			pObject->Use( this, this, USE_SET, 1 );
 		}
-		else if( useReleased && ( caps & FCAP_ONOFF_USE ) )
+		else if( useReleased )
 		{
-			pObject->Use( this, this, USE_SET, 0 );
+			if( caps & FCAP_ONOFF_USE )
+				pObject->Use( this, this, USE_SET, 0 );
 		}
 
 		if( highlightActionables && pObject->pev->movetype != MOVETYPE_PUSHSTEP &&
@@ -1856,11 +1861,14 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 		{
 			*lastHandle = pObject;
 			*usingEntity = usingObject;
+			if( !usingObject && !itemUsedHaptic )
+				CLIENT_COMMAND( edict(), "vr_haptic 10 %d 0.1\n", hapticHand );
 		}
 	}
-	else if( usePressed )
+	else
 	{
-		EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_denyselect.wav", 0.4, ATTN_NORM );
+		if( usePressed )
+			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_denyselect.wav", 0.4, ATTN_NORM );
 	}
 }
 

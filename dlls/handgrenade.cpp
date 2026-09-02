@@ -120,6 +120,7 @@ void CHandGrenade::PrimaryAttack()
 
 		SendWeaponAnim( HANDGRENADE_PINPULL );
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
+		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 80 -1 0.4\n" );
 	}
 }
 
