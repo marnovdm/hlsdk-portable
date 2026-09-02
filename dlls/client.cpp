@@ -619,6 +619,7 @@ void ClientCommand( edict_t *pEntity )
 	{
 		float values[15];
 		int index;
+		CBasePlayer *player;
 
 		if( CMD_ARGC() != 16 )
 			return;
@@ -628,7 +629,10 @@ void ClientCommand( edict_t *pEntity )
 				return;
 		}
 
-		GetClassPtr( (CBasePlayer *)pev )->UpdateVRPose(
+		player = GetClassPtr( (CBasePlayer *)pev );
+		if( player->HasFreshUsercmdVRPose() )
+			return;
+		player->UpdateVRPose(
 			Vector( values[0], values[1], values[2] ),
 			Vector( values[3], values[4], values[5] ),
 			Vector( values[6], values[7], values[8] ),
