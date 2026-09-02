@@ -1318,6 +1318,15 @@ int AddToFullPack( struct entity_state_s *state, int e, edict_t *ent, edict_t *h
 	state->rendercolor.g	= (byte)ent->v.rendercolor.y;
 	state->rendercolor.b	= (byte)ent->v.rendercolor.z;
 
+	CBasePlayer *pHostPlayer = (CBasePlayer *)GET_PRIVATE( host );
+	const int vrHighlightMode = pHostPlayer ? pHostPlayer->VRHighlightMode( CBaseEntity::Instance( ent ) ) : 0;
+	if( vrHighlightMode )
+	{
+		state->renderfx = vrHighlightMode == 2 ? kRenderFxNoDissipation : kRenderFxPulseFast;
+		state->rendermode = kRenderGlow;
+		state->renderamt = 192;
+	}
+
 	state->aiment = 0;
 	if( ent->v.aiment )
 	{
