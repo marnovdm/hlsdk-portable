@@ -287,6 +287,7 @@ public:
 
 	virtual void ItemPreFrame( void )	{ return; }		// called each frame by the player PreThink
 	virtual void ItemPostFrame( void ) { return; }		// called each frame by the player PostThink
+	virtual void ItemImpulseCommand( int command ) { return; }
 
 	virtual void Drop( void );
 	virtual void Kill( void );
@@ -363,6 +364,7 @@ public:
 	// called by CBasePlayerWeapons ItemPostFrame()
 	virtual void PrimaryAttack( void ) { return; }				// do "+ATTACK"
 	virtual void SecondaryAttack( void ) { return; }			// do "+ATTACK2"
+	virtual void ToggleScope( BOOL engage ) { return; }			// do "+alt1"
 	virtual void Reload( void ) { return; }						// do "+RELOAD"
 	virtual void WeaponIdle( void ) { return; }					// called when no buttons pressed
 	virtual int UpdateClientData( CBasePlayer *pPlayer );		// sends hud info to client dll, if things have changed
@@ -1265,7 +1267,7 @@ public:
 private:
 	unsigned short m_usKnife;
 #if !CLIENT_DLL
-	void CheckPhysicalSwing(float speed);
+	void CheckPhysicalSwing(void);
 	void ClearPhysicalSwingState(void);
 	BOOL HasHitEntityThisSwing(CBaseEntity *pEntity);
 	void RememberHitEntityThisSwing(CBaseEntity *pEntity);
@@ -1446,6 +1448,9 @@ public:
 	static	TYPEDESCRIPTION m_SaveData[];
 #endif
 
+	virtual void ItemPostFrame( void );
+	virtual void ItemImpulseCommand( int command );
+
 	void Spawn(void);
 	void Precache(void);
 	int iItemSlot(void) { return 6; }
@@ -1453,6 +1458,9 @@ public:
 	int AddToPlayer(CBasePlayer *pPlayer);
 	void PrimaryAttack(void);
 	void SecondaryAttack(void);
+	void ToggleScope( BOOL engage );
+	void ScopeZoomIn( void );
+	void ScopeZoomOut( void );
 	BOOL Deploy(void);
 	void Holster(int skiplocal = 0);
 	void Reload(void);
@@ -1473,6 +1481,7 @@ public:
 
 private:
 	unsigned short m_usSniper;
+	int m_TargetScopeFOV;
 };
 
 class CSporelauncher : public CShotgun

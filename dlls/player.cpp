@@ -3959,6 +3959,14 @@ void CBasePlayer::ImpulseCommands()
 			FlashlightTurnOn();
 		}
 		break;
+	case 104:
+		if( m_pActiveItem )
+			m_pActiveItem->ItemImpulseCommand( 104 );
+		break;
+	case 105:
+		if( m_pActiveItem )
+			m_pActiveItem->ItemImpulseCommand( 105 );
+		break;
 	case 201:
 		// paint decal
 		if( gpGlobals->time < m_flNextDecalTime )

@@ -103,10 +103,17 @@ Figure out the height of the gun
 */
 void EV_GetGunPosition( event_args_t *args, float *pos, float *origin )
 {
+	cl_entity_t *viewmodel;
 	int idx;
 	vec3_t view_ofs;
 
 	idx = args->entindex;
+	viewmodel = EV_IsLocal( idx ) ? gEngfuncs.GetViewModel() : NULL;
+	if( viewmodel )
+	{
+		VectorCopy( viewmodel->curstate.origin, pos );
+		return;
+	}
 
 	VectorClear( view_ofs );
 	view_ofs[2] = DEFAULT_VIEWHEIGHT;
@@ -152,6 +159,7 @@ Determine where to eject shells from
 */
 void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity, float *ShellVelocity, float *ShellOrigin, float *forward, float *right, float *up, float forwardScale, float upScale, float rightScale )
 {
+	cl_entity_t *viewmodel;
 	int i;
 	vec3_t view_ofs;
 	float fR, fU;
@@ -159,6 +167,12 @@ void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity,
 	int idx;
 
 	idx = args->entindex;
+	viewmodel = EV_IsLocal( idx ) ? gEngfuncs.GetViewModel() : NULL;
+	if( viewmodel )
+	{
+		VectorCopy( viewmodel->curstate.origin, origin );
+		VectorCopy( viewmodel->curstate.velocity, velocity );
+	}
 
 	VectorClear( view_ofs );
 	view_ofs[2] = DEFAULT_VIEWHEIGHT;
@@ -181,7 +195,7 @@ void EV_GetDefaultShellInfo( event_args_t *args, float *origin, float *velocity,
 	for( i = 0; i < 3; i++ )
 	{
 		ShellVelocity[i] = velocity[i] + right[i] * fR + up[i] * fU + forward[i] * 25;
-		ShellOrigin[i] = origin[i] + view_ofs[i] + up[i] * upScale + forward[i] * forwardScale + right[i] * rightScale;
+		ShellOrigin[i] = origin[i] + ( viewmodel ? 0.0f : view_ofs[i] ) + up[i] * upScale + forward[i] * forwardScale + right[i] * rightScale;
 	}
 }
 

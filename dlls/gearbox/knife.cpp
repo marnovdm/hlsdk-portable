@@ -124,7 +124,7 @@ void CKnife::ItemPostFrame(void)
 	if (speed >= KNIFE_MIN_PHYSICAL_SWING_SPEED)
 	{
 		m_fPhysicalSwinging = TRUE;
-		CheckPhysicalSwing(speed);
+		CheckPhysicalSwing();
 	}
 	else if (m_fPhysicalSwinging)
 		ClearPhysicalSwingState();
@@ -321,7 +321,7 @@ int CKnife::Swing(int fFirst)
 }
 
 #if !CLIENT_DLL
-void CKnife::CheckPhysicalSwing(float speed)
+void CKnife::CheckPhysicalSwing(void)
 {
 	TraceResult tr;
 	UTIL_MakeVectors(m_pPlayer->GetWeaponViewAngles());
@@ -337,8 +337,10 @@ void CKnife::CheckPhysicalSwing(float speed)
 	RememberHitEntityThisSwing(pEntity);
 	m_flPhysicalHitCount += 1.0f;
 	ClearMultiDamage();
-	pEntity->TraceAttack(m_pPlayer->pev, gSkillData.plrDmgKnife * (speed / KNIFE_MIN_PHYSICAL_SWING_SPEED) /
-		m_flPhysicalHitCount, gpGlobals->v_up, &tr, DMG_CLUB);
+	// Motion only gates a physical swing. Each newly hit entity receives the
+	// Lambda knife's full swing damage divided by this swing's hit count.
+	pEntity->TraceAttack(m_pPlayer->pev, gSkillData.plrDmgKnife / m_flPhysicalHitCount,
+		gpGlobals->v_up, &tr, DMG_CLUB);
 	ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
 
 	if (pEntity->Classify() != CLASS_NONE && pEntity->Classify() != CLASS_MACHINE)

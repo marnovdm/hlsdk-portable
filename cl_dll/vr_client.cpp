@@ -295,7 +295,7 @@ int VR_IsWeaponStabilised()
 
 int VR_ShouldApplyWeaponRecoil()
 {
-	return !VR_IsActive() || CVAR_GET_FLOAT( "vr_weapon_recoil" ) != 0.0f;
+	return !VR_IsActive() || CVAR_GET_FLOAT( "vr_weapon_recoil" ) != 0.0f || g_vrScopeEngaged;
 }
 
 void VR_Haptic( float durationMilliseconds, unsigned int hand, float amplitude )

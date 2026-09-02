@@ -51,6 +51,9 @@ static void VR_HapticLocalWeaponFire( int idx, int bulletType )
 
 	switch( bulletType )
 	{
+	case BULLET_PLAYER_762:
+		/* The M40 event supplies its own Lambda1VR haptic profile. */
+		break;
 	case BULLET_PLAYER_MP5:
 		VR_Haptic( 60.0f, dominant, 0.75f );
 		if( VR_IsWeaponStabilised() )
@@ -69,6 +72,43 @@ static void VR_HapticLocalWeaponFire( int idx, int bulletType )
 		VR_Haptic( 120.0f, dominant, 0.4f );
 		break;
 	}
+}
+
+static void VR_HapticLocalStabilisedWeaponFire( int idx, float duration, float dominantAmplitude, float supportAmplitude )
+{
+	const unsigned int dominant = (unsigned int)VR_GetDominantHand();
+	const unsigned int support = dominant == VR_CLIENT_HAND_LEFT ? VR_CLIENT_HAND_RIGHT : VR_CLIENT_HAND_LEFT;
+
+	if( !EV_IsLocal( idx ) )
+		return;
+
+	VR_Haptic( duration, dominant, dominantAmplitude );
+	if( VR_IsWeaponStabilised() )
+		VR_Haptic( duration, support, supportAmplitude );
+}
+
+/* Lambda1VR event pose handling uses the tracked viewmodel for locally
+ * predicted effects. Remote events must keep their authoritative packet pose. */
+static void EV_HLDM_GetEventPose( event_args_t *args, float *origin, float *angles, float *velocity )
+{
+	cl_entity_t *viewmodel;
+
+	if( origin ) VectorCopy( args->origin, origin );
+	if( angles ) VectorCopy( args->angles, angles );
+	if( velocity ) VectorCopy( args->velocity, velocity );
+	if( !EV_IsLocal( args->entindex ) )
+		return;
+
+	viewmodel = gEngfuncs.GetViewModel();
+	if( !viewmodel )
+		return;
+	if( origin ) VectorCopy( viewmodel->curstate.origin, origin );
+	if( angles )
+	{
+		VectorCopy( viewmodel->curstate.angles, angles );
+		angles[PITCH] = -angles[PITCH];
+	}
+	if( velocity ) VectorCopy( viewmodel->curstate.velocity, velocity );
 }
 
 extern "C" char PM_FindTextureType( char *name );
@@ -542,9 +582,7 @@ static void EV_FireGlock_Impl( event_args_t *args )
 	vec3_t up, right, forward;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	empty = args->bparam1;
 	AngleVectors( angles, forward, right, up );
@@ -605,9 +643,7 @@ void EV_FireShotGunDouble( event_args_t *args )
 	//float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -659,9 +695,7 @@ void EV_FireShotGunSingle( event_args_t *args )
 	//float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -716,9 +750,7 @@ void EV_FireMP5( event_args_t *args )
 	//float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -761,7 +793,7 @@ void EV_FireMP52( event_args_t *args )
 	vec3_t origin;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	if( EV_IsLocal( idx ) )
 	{
@@ -800,9 +832,7 @@ void EV_FirePython( event_args_t *args )
 	//float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -856,9 +886,7 @@ void EV_SpinGauss( event_args_t *args )
 	int pitch;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	pitch = args->iparam1;
 
@@ -908,9 +936,7 @@ void EV_FireGauss( event_args_t *args )
 	vec3_t up, right, forward;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	if( args->bparam2 )
 	{
@@ -1189,7 +1215,7 @@ void EV_Crowbar( event_args_t *args )
 	//vec3_t velocity;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 	
 	//Play Swing sound
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/cbar_miss1.wav", 1, ATTN_NORM, 0, PITCH_NORM ); 
@@ -1258,10 +1284,7 @@ void EV_FireCrossbow2( event_args_t *args )
 	vec3_t velocity;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -1344,7 +1367,7 @@ void EV_FireCrossbow( event_args_t *args )
 	vec3_t origin;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/xbow_fire1.wav", 1, ATTN_NORM, 0, 93 + gEngfuncs.pfnRandomLong( 0, 0xF ) );
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_ITEM, "weapons/xbow_reload1.wav", gEngfuncs.pfnRandomFloat( 0.95f, 1.0f ), ATTN_NORM, 0, 93 + gEngfuncs.pfnRandomLong( 0, 0xF ) );
@@ -1389,7 +1412,7 @@ void EV_FireRpg( event_args_t *args )
 	vec3_t origin;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/rocketfire1.wav", 0.9, ATTN_NORM, 0, PITCH_NORM );
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_ITEM, "weapons/glauncher.wav", 0.7, ATTN_NORM, 0, PITCH_NORM );
@@ -1475,7 +1498,7 @@ void EV_EgonFire( event_args_t *args )
 	vec3_t origin;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 	//iFireState = args->iparam1;
 	iFireMode = args->iparam2;
 	int iStartup = args->bparam1;
@@ -1574,7 +1597,7 @@ void EV_EgonStop( event_args_t *args )
 	vec3_t origin;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	gEngfuncs.pEventAPI->EV_StopSound( idx, CHAN_STATIC, EGON_SOUND_RUN );
 
@@ -1641,8 +1664,7 @@ void EV_HornetGunFire( event_args_t *args )
 	vec3_t origin, angles; //, vecSrc, forward, right, up;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
+	EV_HLDM_GetEventPose( args, origin, angles, NULL );
 	//iFireMode = args->iparam1;
 
 	//Only play the weapon anims if I shot it.
@@ -1696,8 +1718,7 @@ void EV_TripmineFire( event_args_t *args )
 
 	idx = args->entindex;
 	const bool last = args->bparam1 != 0;
-	VectorCopy( args->origin, vecSrc );
-	VectorCopy( args->angles, angles );
+	EV_HLDM_GetEventPose( args, vecSrc, angles, NULL );
 
 	AngleVectors( angles, forward, NULL, NULL );
 
@@ -1753,8 +1774,7 @@ void EV_SnarkFire( event_args_t *args )
 	pmtrace_t tr;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, vecSrc );
-	VectorCopy( args->angles, angles );
+	EV_HLDM_GetEventPose( args, vecSrc, angles, NULL );
 
 	AngleVectors( angles, forward, NULL, NULL );
 
@@ -1800,7 +1820,7 @@ void EV_TrainPitchAdjust( event_args_t *args )
 
 	idx = args->entindex;
 
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	us_params = (unsigned short)args->iparam1;
 	stop = args->bparam1;
@@ -1859,7 +1879,7 @@ void EV_VehiclePitchAdjust( event_args_t *args )
 
 	idx = args->entindex;
 
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	us_params = (unsigned short)args->iparam1;
 	stop = args->bparam1;
@@ -1928,13 +1948,14 @@ void EV_Displacer( event_args_t *args )
 	vec3_t origin;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	if( EV_IsLocal( idx ) )
 	{
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( DISPLACER_FIRE, 0 );
 		V_PunchAxis( 0, -2.0 );
 	}	
+	VR_HapticLocalStabilisedWeaponFire( idx, 100.0f, 1.0f, 1.0f );
 
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/displacer_fire.wav", 1, ATTN_NORM, 0, PITCH_NORM );
 }
@@ -1972,9 +1993,7 @@ void EV_FireEagle( event_args_t *args )
 	float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -2030,7 +2049,7 @@ void EV_Knife( event_args_t *args )
 	vec3_t velocity;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	//Play Swing sound
 	switch( gEngfuncs.pfnRandomLong( 0, 2 ) )
@@ -2097,9 +2116,7 @@ void EV_FireM249( event_args_t *args )
 	float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -2158,8 +2175,7 @@ void EV_PenguinFire( event_args_t *args )
 	pmtrace_t tr;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, vecSrc );
-	VectorCopy( args->angles, angles );
+	EV_HLDM_GetEventPose( args, vecSrc, angles, NULL );
 
 	AngleVectors( angles, forward, NULL, NULL );
 
@@ -2219,7 +2235,7 @@ void EV_PipeWrench( event_args_t *args )
 	vec3_t velocity;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, NULL, NULL );
 
 	if( EV_IsLocal( idx ) )
 	{
@@ -2282,10 +2298,12 @@ void EV_ShockFire( event_args_t *args )
 {
 	int idx;
 	vec3_t origin;
+	vec3_t angles;
+	vec3_t velocity;
 
 	idx = args->entindex;
 
-	VectorCopy( args->origin, origin );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	int fPlayEffects = args->iparam1;
 
@@ -2344,6 +2362,8 @@ void EV_ShockFire( event_args_t *args )
 			gEngfuncs.pEventAPI->EV_PopPMStates();
 		}
 	}
+
+	VR_HapticLocalStabilisedWeaponFire( idx, 100.0f, 0.7f, 0.6f );
 }
 //======================
 //	   SHOCKRIFLE END
@@ -2377,9 +2397,7 @@ void EV_FireSniper( event_args_t *args )
 	float flSpread = 0.01;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -2399,6 +2417,7 @@ void EV_FireSniper( event_args_t *args )
 
 		V_PunchAxis( 0, -5.0 );
 	}
+	VR_HapticLocalStabilisedWeaponFire( idx, 200.0f, 0.9f, 0.8f );
 
 	// Play fire sound.
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/sniper_fire.wav", 1.0f, ATTN_NORM, 0, PITCH_NORM );
@@ -2438,9 +2457,7 @@ void EV_SporeFire( event_args_t *args )
 	vec3_t up, right, forward;
 
 	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-	VectorCopy( args->angles, angles );
-	VectorCopy( args->velocity, velocity );
+	EV_HLDM_GetEventPose( args, origin, angles, velocity );
 
 	AngleVectors( angles, forward, right, up );
 
@@ -2456,6 +2473,7 @@ void EV_SporeFire( event_args_t *args )
 		gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/splauncher_fire.wav", 1, ATTN_NORM, 0, 100 );
 	else
 		gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/splauncher_altfire.wav", 1, ATTN_NORM, 0, 100 );
+	VR_HapticLocalStabilisedWeaponFire( idx, 100.0f, 0.6f, 0.5f );
 
 	Vector	vecSpitOffset;
 	Vector	vecSpitDir;
