@@ -17,6 +17,7 @@
 #define PLAYER_H
 
 #include "pm_materials.h"
+#include "vr_usercmd_sidecar.h"
 class CRope;
 
 #define PLAYER_FATAL_FALL_SPEED		1024// approx 60 feet
@@ -218,6 +219,7 @@ public:
 	virtual void PostThink( void );
 	virtual Vector GetGunPosition( void );
 	BOOL HasFreshVRPose( void ) const;
+	BOOL HasFreshUsercmdVRPose( void ) const;
 	Vector GetWeaponPosition( void ) const;
 	Vector GetWeaponAngles( void ) const;
 	Vector GetWeaponViewAngles( void ) const;
@@ -227,6 +229,7 @@ public:
 	BOOL IsWeaponUnderWater( void ) const;
 	BOOL UpdateVRPose( const Vector &weaponPosition, const Vector &weaponAngles,
 		const Vector &weaponVelocity, const Vector &offhandPosition, const Vector &offhandAngles );
+	BOOL UpdateVRPoseSidecar( const vr_usercmd_sidecar_t *sample );
 	void ClearVRPose( void );
 	void SetVRUse2State( BOOL down );
 	int VRHighlightMode( const CBaseEntity *entity );
@@ -426,6 +429,7 @@ private:
 	Vector m_vecVROffhandPosition;
 	Vector m_vecVROffhandAngles;
 	float m_flVRPoseTime;
+	float m_flVRUsercmdPoseTime;
 	BOOL m_bVRUse2;
 	BOOL m_bVRUse2Pressed;
 	BOOL m_bVRUse2Released;

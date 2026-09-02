@@ -21,6 +21,8 @@
 #include	"decals.h"
 #include	"gamerules.h"
 #include	"game.h"
+#include	"player.h"
+#include	"vr_usercmd_sidecar.h"
 
 bool g_fIsXash3D = false;
 
@@ -29,6 +31,24 @@ void EntvarsKeyvalue( entvars_t *pev, KeyValueData *pkvd );
 extern "C" void PM_Move ( struct playermove_s *ppmove, int server );
 extern "C" void PM_Init ( struct playermove_s *ppmove  );
 extern "C" char PM_FindTextureType( const char *name );
+extern "C" void PM_VRBeginUsercmdSidecar( const vr_usercmd_sidecar_t *sample );
+extern "C" void PM_VREndUsercmdSidecar( void );
+
+extern "C" void DLLEXPORT VR_BeginPMUsercmdSidecar( const vr_usercmd_sidecar_t *sample )
+{
+	PM_VRBeginUsercmdSidecar( sample );
+}
+
+extern "C" void DLLEXPORT VR_EndPMUsercmdSidecar( void )
+{
+	PM_VREndUsercmdSidecar();
+}
+
+extern "C" void DLLEXPORT VR_UpdateUsercmdVRPose( void *player, const vr_usercmd_sidecar_t *sample )
+{
+	if( player && sample )
+		GetClassPtr( (CBasePlayer *)&((edict_t *)player)->v )->UpdateVRPoseSidecar( sample );
+}
 
 extern Vector VecBModelOrigin( entvars_t* pevBModel );
 extern DLL_GLOBAL Vector g_vecAttackDir;
