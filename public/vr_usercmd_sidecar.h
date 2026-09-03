@@ -13,6 +13,14 @@ vr_usercmd_sidecar.h - ABI-neutral VR usercmd extension
 #define VR_USERCMD_SIDECAR_POSE_VALID   ( 1u << 1 )
 #define VR_USERCMD_SIDECAR_WIRE_BYTES 35u
 
+#ifdef _WIN32
+#define VR_USERCMD_SIDECAR_EXPORT __declspec( dllexport )
+#define VR_USERCMD_SIDECAR_CALL __cdecl
+#else
+#define VR_USERCMD_SIDECAR_EXPORT __attribute__((visibility("default")))
+#define VR_USERCMD_SIDECAR_CALL
+#endif
+
 /* This record is never embedded in usercmd_t or playermove_t.  Position
  * values are relative to the player's eye at 1/8 game-unit precision;
  * angles use degrees at 1/128 precision. */
@@ -71,8 +79,8 @@ static inline void VR_UsercmdSidecarApplyPose( vr_usercmd_sidecar_t *sample, con
 #define VR_USERCMD_SIDECAR_END_PM_EXPORT "VR_EndPMUsercmdSidecar"
 #define VR_USERCMD_SIDECAR_UPDATE_POSE_EXPORT "VR_UpdateUsercmdVRPose"
 
-typedef void (*vr_usercmd_sidecar_begin_pm_t)( const vr_usercmd_sidecar_t *sample );
-typedef void (*vr_usercmd_sidecar_end_pm_t)( void );
-typedef void (*vr_usercmd_sidecar_update_pose_t)( void *player, const vr_usercmd_sidecar_t *sample );
+typedef void (VR_USERCMD_SIDECAR_CALL *vr_usercmd_sidecar_begin_pm_t)( const vr_usercmd_sidecar_t *sample );
+typedef void (VR_USERCMD_SIDECAR_CALL *vr_usercmd_sidecar_end_pm_t)( void );
+typedef void (VR_USERCMD_SIDECAR_CALL *vr_usercmd_sidecar_update_pose_t)( void *player, const vr_usercmd_sidecar_t *sample );
 
 #endif /* VR_USERCMD_SIDECAR_H */
