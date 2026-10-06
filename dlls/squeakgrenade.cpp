@@ -543,7 +543,7 @@ void CSqueak::PrimaryAttack()
 			if( m_pPlayer->HasFreshVRPose() )
 			{
 				spawnPosition = m_pPlayer->GetWeaponPosition();
-				throwVelocity = m_pPlayer->GetWeaponVelocity() * 0.7f + m_pPlayer->pev->velocity;
+				throwVelocity = m_pPlayer->GetThrowVelocity( 0.7f, 600.0f ) + m_pPlayer->pev->velocity;
 			}
 			CBaseEntity *pSqueak = CBaseEntity::Create( "monster_snark", spawnPosition, m_pPlayer->GetWeaponAngles(), m_pPlayer->edict() );
 			pSqueak->pev->velocity = throwVelocity;

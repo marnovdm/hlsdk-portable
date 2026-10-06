@@ -2209,6 +2209,8 @@ void PM_LadderMove( physent_t *pLadder )
 		float forward = 0, right = 0;
 		vec3_t vpn, v_right;
 		float flSpeed = MAX_CLIMB_SPEED;
+		int vrLadder = 0;
+		float vrLadderPitch = 0.0f;
 
 		// they shouldn't be able to move faster than their maxspeed
 		if( flSpeed > pmove->maxspeed )
@@ -2219,10 +2221,14 @@ void PM_LadderMove( physent_t *pLadder )
 			( pm_vr_usercmd_sidecar.flags & VR_USERCMD_SIDECAR_LADDER_VALID ))
 		{
 			vec3_t controllerAngles;
+			// Off-hand pitch picks up/down; the yaw is the movement heading (head or off-hand,
+			// set by the engine) so it matches the raw-stick forward/right buttons below.
 			controllerAngles[PITCH] = pm_vr_usercmd_sidecar.ladder_angles[0] * ( 1.0f / 128.0f );
 			controllerAngles[YAW] = pm_vr_usercmd_sidecar.ladder_angles[1] * ( 1.0f / 128.0f );
 			controllerAngles[ROLL] = 0.0f;
 			AngleVectors( controllerAngles, vpn, v_right, NULL );
+			vrLadder = 1;
+			vrLadderPitch = controllerAngles[PITCH];
 		}
 		else AngleVectors( pmove->angles, vpn, v_right, NULL );
 
@@ -2278,10 +2284,28 @@ void PM_LadderMove( physent_t *pLadder )
 				// because the velocity is a sum of the directional velocity and the converted
 				// velocity through the face of the ladder -- by design.
 				CrossProduct( trace.plane.normal, perp, tmp );
-				VectorMA( lateral, -normal, tmp, pmove->velocity );
-				if( onFloor && normal > 0 )	// On ground moving away from the ladder
+				if( vrLadder )
 				{
-					VectorMA( pmove->velocity, MAX_CLIMB_SPEED, trace.plane.normal, pmove->velocity );
+					// VR: stock HL turns the push *into* the ladder into "up" and adds the view's own
+					// vertical part, so looking down a natural 45-60 degrees nearly cancels out (descending
+					// crawled). Here forward climbs at full speed the way you look (down if looking more
+					// than 20 degrees down, else up), back the other way; sideways input still strafes.
+					vec3_t side;
+					float climb = forward * ( vrLadderPitch > 20.0f ? -1.0f : 1.0f );
+
+					VectorScale( v_right, right, side );
+					VectorMA( side, -DotProduct( side, trace.plane.normal ), trace.plane.normal, side );
+					VectorMA( side, climb, tmp, pmove->velocity );
+					if( onFloor && climb < 0 )	// at the bottom: step off backwards
+						VectorMA( pmove->velocity, MAX_CLIMB_SPEED, trace.plane.normal, pmove->velocity );
+				}
+				else
+				{
+					VectorMA( lateral, -normal, tmp, pmove->velocity );
+					if( onFloor && normal > 0 )	// On ground moving away from the ladder
+					{
+						VectorMA( pmove->velocity, MAX_CLIMB_SPEED, trace.plane.normal, pmove->velocity );
+					}
 				}
 				//pev->velocity = lateral - ( CrossProduct( trace.vecPlaneNormal, perp ) * normal );
 			}
