@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "vr_client.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 
@@ -130,8 +131,11 @@ int CHudBattery::Draw( float flTime )
 		SPR_DrawAdditive( 0, x, y - iOffset + ( rc.top - m_prc2->top ), &rc );
 	}
 
+	int iBoxX = x;
 	x += ( m_prc1->right - m_prc1->left );
 	x = gHUD.DrawHudNumber( x, y + gHUD.m_iHudNumbersYOffset, DHN_3DIGITS | DHN_DRAWZERO, m_iBat, r, g, b );
+	VR_HudBoxAdd( VR_HUD_BOX_SUIT, iBoxX, y - iOffset, x - iBoxX,
+		Q_max( m_prc1->bottom - m_prc1->top, gHUD.m_iFontHeight + gHUD.m_iHudNumbersYOffset + iOffset ));
 
 	return 1;
 }

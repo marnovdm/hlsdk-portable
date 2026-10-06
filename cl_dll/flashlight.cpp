@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "vr_client.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 
@@ -110,6 +111,8 @@ int CHudFlashlight::Draw( float flTime )
 	}
 	if( !show )
 		return 1;
+	if( VR_HandHudActive() )
+		return 1;	// the hand HUD drops the icon: the beam shows whether the flashlight is on
 
 	int r, g, b, x, y, a;
 	wrect_t rc;

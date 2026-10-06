@@ -18,6 +18,7 @@
 #include <cmath>
 
 #include "hud.h"
+#include "vr_client.h"
 #include "cl_util.h"
 //#include "triangleapi.h"
 
@@ -155,6 +156,7 @@ int CHud::Redraw( float flTime, int intermission )
 
 	m_iHudNumbersYOffset = IsHL25() ? m_iFontHeight * 0.2 : 0;
 
+	VR_HudBoxBegin();
 	if( m_pCvarDraw->value )
 	{
 		HUDLIST *pList = m_pHudList;
@@ -176,6 +178,7 @@ int CHud::Redraw( float flTime, int intermission )
 			pList = pList->pNext;
 		}
 	}
+	VR_HudBoxPublish();
 
 	// are we in demo mode? do we need to draw the logo in the top corner?
 	if( m_iLogo )
