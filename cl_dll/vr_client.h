@@ -9,6 +9,7 @@ void VR_Init();
 void VR_Reset();
 void VR_UpdateCurrentWeapon( long weapon );
 void VR_UpdateViewmodel( struct ref_params_s *pparams );
+int VR_IsMirroredHandEntity( const struct cl_entity_s *entity );
 int VR_IsActive();
 int VR_GetDominantHand();
 int VR_IsWeaponStabilised();

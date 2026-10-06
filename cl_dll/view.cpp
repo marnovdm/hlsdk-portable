@@ -333,6 +333,10 @@ void V_CalcViewRoll( struct ref_params_s *pparams )
 	if( !viewentity )
 		return;
 
+	// No strafe/damage roll in VR: rolling the camera the head did not roll causes motion sickness.
+	if( VR_IsActive() && pparams->health > 0 )
+		return;
+
 	side = V_CalcRoll( viewentity->angles, pparams->simvel, pparams->movevars->rollangle, pparams->movevars->rollspeed );
 
 	pparams->viewangles[ROLL] += side;
@@ -438,7 +442,8 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 	// transform the view offset by the model's matrix to get the offset from
 	// model origin for the view
-	bob = V_CalcBob( pparams );
+	// No walking bob in VR: the camera must follow the head only (the viewmodel is tracked anyway).
+	bob = VR_IsActive() ? 0.0f : V_CalcBob( pparams );
 
 	// refresh position
 	VectorCopy( pparams->simorg, pparams->vieworg );

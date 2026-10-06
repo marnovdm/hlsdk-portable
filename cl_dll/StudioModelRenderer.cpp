@@ -18,6 +18,7 @@
 #include "dlight.h"
 #include "triangleapi.h"
 #include "byteswap.h"
+#include "vr_client.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -536,6 +537,14 @@ void CStudioModelRenderer::StudioSetUpTransform( int trivial_accept )
 
 	angles[PITCH] = -angles[PITCH];
 	AngleMatrix( angles, ( *m_protationmatrix ) );
+
+	// VR left hand: mirror the right-hand model across its forward/up plane
+	if( VR_IsMirroredHandEntity( m_pCurrentEntity ))
+	{
+		( *m_protationmatrix )[0][1] = -( *m_protationmatrix )[0][1];
+		( *m_protationmatrix )[1][1] = -( *m_protationmatrix )[1][1];
+		( *m_protationmatrix )[2][1] = -( *m_protationmatrix )[2][1];
+	}
 
 	if( !IEngineStudio.IsHardware() )
 	{
@@ -1184,7 +1193,14 @@ int CStudioModelRenderer::StudioDrawModel( int flags )
 
 		IEngineStudio.StudioSetRemapColors( m_nTopColor, m_nBottomColor );
 
-		StudioRenderModel();
+		// mirroring flips the triangle winding: draw the mirrored hand two-sided
+		if( VR_IsMirroredHandEntity( m_pCurrentEntity ))
+		{
+			gEngfuncs.pTriAPI->CullFace( TRI_NONE );
+			StudioRenderModel();
+			gEngfuncs.pTriAPI->CullFace( TRI_FRONT );
+		}
+		else StudioRenderModel();
 	}
 
 	return 1;

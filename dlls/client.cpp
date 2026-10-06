@@ -1320,7 +1320,11 @@ int AddToFullPack( struct entity_state_s *state, int e, edict_t *ent, edict_t *h
 
 	CBasePlayer *pHostPlayer = (CBasePlayer *)GET_PRIVATE( host );
 	const int vrHighlightMode = pHostPlayer ? pHostPlayer->VRHighlightMode( CBaseEntity::Instance( ent ) ) : 0;
-	if( vrHighlightMode )
+	// Only highlight what is actually drawn: maps use invisible brushes (translucent at amount 0,
+	// or EF_NODRAW) as use volumes, and forcing glow/192 made them appear with their editor texture.
+	const BOOL vrHighlightVisible = !( ent->v.effects & EF_NODRAW ) &&
+		!( ent->v.rendermode != kRenderNormal && ent->v.renderamt <= 0.0f );
+	if( vrHighlightMode && vrHighlightVisible )
 	{
 		state->renderfx = vrHighlightMode == 2 ? kRenderFxNoDissipation : kRenderFxPulseFast;
 		state->rendermode = kRenderGlow;

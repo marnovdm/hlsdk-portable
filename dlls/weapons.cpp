@@ -293,6 +293,21 @@ void W_Precache( void )
 
 	// custom items...
 
+	// VR hand and flashlight models: the client loads them with CL_LoadModel, which only
+	// finds precached models. They ship with the Lambda1VR asset pack, so only precache
+	// the ones present (precaching a missing model is a fatal error).
+	static const char *const vrModels[] = { "models/v_hand.mdl", "models/v_torch.mdl" };
+	for( size_t i = 0; i < sizeof( vrModels ) / sizeof( vrModels[0] ); i++ )
+	{
+		int length;
+		byte *file = LOAD_FILE_FOR_ME( vrModels[i], &length );
+
+		if( !file )
+			continue;
+		FREE_FILE( file );
+		PRECACHE_MODEL( vrModels[i] );
+	}
+
 	// common world objects
 	UTIL_PrecacheOther( "item_suit" );
 	UTIL_PrecacheOther( "item_healthkit" );

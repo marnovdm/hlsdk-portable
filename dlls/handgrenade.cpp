@@ -120,7 +120,10 @@ void CHandGrenade::PrimaryAttack()
 
 		SendWeaponAnim( HANDGRENADE_PINPULL );
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
+#if !CLIENT_DLL
+		// server only: the client weapon prediction has no pfnClientCommand
 		CLIENT_COMMAND( m_pPlayer->edict(), "vr_haptic 80 -1 0.4\n" );
+#endif
 	}
 }
 
@@ -155,7 +158,7 @@ void CHandGrenade::WeaponIdle( void )
 			// The authoritative pose stream supplies the hand's recent motion;
 			// retain stock throw math automatically when that stream is stale.
 			vecSrc = m_pPlayer->GetWeaponPosition();
-			vecThrow = m_pPlayer->GetWeaponVelocity() * ( 2.0f / 3.0f ) + m_pPlayer->pev->velocity;
+			vecThrow = m_pPlayer->GetThrowVelocity( 2.0f / 3.0f, 1000.0f ) + m_pPlayer->pev->velocity;
 			flVel = vecThrow.Length();
 		}
 

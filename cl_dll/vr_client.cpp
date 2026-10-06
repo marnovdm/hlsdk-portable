@@ -5,6 +5,7 @@
 #include "util_vector.h"
 #include "entity_types.h"
 #include "vr_client.h"
+#include "com_model.h"
 
 #include <float.h>
 #include <math.h>
@@ -142,6 +143,44 @@ static void VR_TransformPose( const vr_client_pose_t &pose, float bodyYaw, Vecto
 	VR_BasisAngles( forward, right, up, angles );
 }
 
+/* Angles of a pose tilted nose-down by downDegrees about its own right axis. The grip correction
+ * used to be added to the Euler pitch, which near straight up/down (gimbal lock: yaw and roll
+ * become the same rotation, yaw jumps with tiny hand moves) tilted the gun towards a random
+ * direction - aiming steeply up went all over the place. */
+static void VR_TransformPoseTilted( const vr_client_pose_t &pose, float bodyYaw, float downDegrees, Vector &angles )
+{
+	const float a = downDegrees * (float)M_PI / 180.0f;
+	const Vector forward = VR_RotateYaw( pose.forward, bodyYaw );
+	const Vector right = VR_RotateYaw( pose.right, bodyYaw );
+	const Vector up = VR_RotateYaw( pose.up, bodyYaw );
+
+	VR_BasisAngles( forward * cosf( a ) - up * sinf( a ), right, up * cosf( a ) + forward * sinf( a ), angles );
+}
+
+/* Studio models keep the Quake pitch convention (positive = nose up) and the
+ * renderer negates it again (StudioSetUpTransform), like view.cpp does for the
+ * stock viewmodel. VR poses are view angles, so flip pitch for model entities. */
+static Vector VR_ModelAngles( const Vector &viewAngles )
+{
+	return Vector( -viewAngles[PITCH], viewAngles[YAW], viewAngles[ROLL] );
+}
+
+/* The usercmd sidecar packs angles as int16 at 1/128 degree, i.e. +-256 degrees. VectorAngles
+ * returns 0..360 (the two-handed aim), so pitch just below level (~350) or yaw past 256 was
+ * clamped and the server fired somewhere else than the gun pointed. Wrap to -180..180 first. */
+static Vector VR_WrapAngles( const Vector &angles )
+{
+	Vector wrapped;
+	for( int index = 0; index < 3; ++index )
+	{
+		float value = fmodf( angles[index] + 180.0f, 360.0f );
+		if( value < 0.0f )
+			value += 360.0f;
+		wrapped[index] = value - 180.0f;
+	}
+	return wrapped;
+}
+
 static int VR_IsFiniteVector( const Vector &vector )
 {
 	return vector.x == vector.x && vector.x >= -FLT_MAX && vector.x <= FLT_MAX &&
@@ -219,6 +258,33 @@ static int VR_ParseCommandFloat( const char *text, float &value )
 	return value == value;
 }
 
+static int VR_GetWeaponPose( float bodyYaw, float frametime, vr_weapon_pose_t *pose );
+void VR_RefreshLaserSight( const float *origin, const float *viewAngles ); /* hl/hl_weapons.cpp */
+
+/* Debug: gun pose vs hand and viewmodel animation, for "gun sits wrong after a weapon switch". */
+static void VR_WeaponInfoCommand()
+{
+	cl_entity_t *view = gEngfuncs.GetViewModel();
+	cl_entity_t *player = gEngfuncs.GetLocalPlayer();
+	const int dominant = VR_GetDominantHand();
+	vr_weapon_pose_t pose;
+
+	gEngfuncs.Con_Printf( "weapon id %ld, model %s, sequence %d, frame %.1f, animtime %.2f (now %.2f)\n",
+		g_vrCurrentWeapon, view && view->model ? view->model->name : "-", view ? view->curstate.sequence : -1,
+		view ? view->curstate.frame : 0.0f, view ? view->curstate.animtime : 0.0f, gEngfuncs.GetClientTime() );
+	if( !player || !VR_GetWeaponPose( player->angles[YAW], 0.0f, &pose ))
+	{
+		gEngfuncs.Con_Printf( "no VR weapon pose\n" );
+		return;
+	}
+	gEngfuncs.Con_Printf( "aim hand %d offset %.1f %.1f %.1f angles %.1f %.1f %.1f stabilised %d\n", dominant,
+		pose.weaponOffset.x, pose.weaponOffset.y, pose.weaponOffset.z,
+		pose.weaponAngles.x, pose.weaponAngles.y, pose.weaponAngles.z, pose.stabilised );
+	if( view )
+		gEngfuncs.Con_Printf( "viewmodel origin %.1f %.1f %.1f angles %.1f %.1f %.1f\n",
+			view->origin[0], view->origin[1], view->origin[2], view->angles[0], view->angles[1], view->angles[2] );
+}
+
 static void VR_ServerHapticCommand()
 {
 	float duration, handValue, amplitude;
@@ -254,11 +320,14 @@ void VR_Init()
 	CVAR_CREATE( "vr_flashlight_model", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_hand_model", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_mirror_weapons", "0", FCVAR_ARCHIVE );
+	CVAR_CREATE( "vr_laser_width", "0.3", FCVAR_ARCHIVE ); // gun laser beam width (was a fixed 0.75)
+	CVAR_CREATE( "vr_laser_dot_scale", "0.12", FCVAR_ARCHIVE ); // laser dot sprite scale (was a fixed 0.5)
 	CVAR_CREATE( "vr_weapon_backface_culling", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_headtorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_reversetorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "hand", "0", FCVAR_ARCHIVE );
 	gEngfuncs.pfnAddCommand( "vr_haptic", VR_ServerHapticCommand );
+	gEngfuncs.pfnAddCommand( "vr_weaponinfo", VR_WeaponInfoCommand );
 	g_vrInitialised = 1;
 }
 
@@ -379,12 +448,29 @@ static int VR_ResolveWeaponPose( float bodyYaw, float frametime, vr_weapon_pose_
 		separationLength > separationMinimum && separationLength < separationMaximum;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", pose->stabilised ? 1.0f : 0.0f );
 	if( pose->stabilised )
+	{
+		/* VectorAngles returns model-convention pitch (positive = up); these are view angles */
 		VectorAngles( separation, pose->weaponAngles );
+		pose->weaponAngles[PITCH] = -pose->weaponAngles[PITCH];
+	}
 
-	if( g_vrCurrentWeapon == WEAPON_CROWBAR )
-		pose->weaponAngles[PITCH] += CVAR_GET_FLOAT( "vr_crowbar_pitchadjust" );
-	else if( !VR_IsThrowable( g_vrCurrentWeapon ) )
-		pose->weaponAngles[PITCH] += CVAR_GET_FLOAT( "vr_weapon_pitchadjust" );
+	/* The pitch adjust cvars use Lambda1VR's model convention (negative = tilt
+	 * down); weaponAngles are view angles here (positive = down), hence -=. */
+	/* The adjust corrects the one-handed grip (the controller's aim ray points up relative to a
+	 * pistol grip). Two-handed, the gun follows the line between the hands, which already is the
+	 * barrel direction - applying it there aimed the gun ~20 degrees low. */
+	{
+		float adjust = 0.0f;
+		if( pose->stabilised )
+			;
+		else if( g_vrCurrentWeapon == WEAPON_CROWBAR )
+			adjust = CVAR_GET_FLOAT( "vr_crowbar_pitchadjust" );
+		else if( !VR_IsThrowable( g_vrCurrentWeapon ) )
+			adjust = CVAR_GET_FLOAT( "vr_weapon_pitchadjust" );
+		/* negative adjust = nose down; applied about the controller's own right axis */
+		if( adjust != 0.0f )
+			VR_TransformPoseTilted( weapon->aim, bodyYaw, -adjust, pose->weaponAngles );
+	}
 
 	VR_UpdateScope( bodyYaw, pose->weaponOffset, pose->stabilised );
 	if( g_vrScopeEngaged && CVAR_GET_FLOAT( "vr_scope_stabilise" ) != 0.0f )
@@ -436,8 +522,8 @@ static void VR_AddTorchModel( const Vector &origin, const Vector &angles )
 	g_vrTorchEntity.curstate.rendermode = kRenderNormal;
 	VectorCopy( origin, g_vrTorchEntity.origin );
 	VectorCopy( origin, g_vrTorchEntity.curstate.origin );
-	VectorCopy( angles, g_vrTorchEntity.angles );
-	VectorCopy( angles, g_vrTorchEntity.curstate.angles );
+	VectorCopy( VR_ModelAngles( angles ), g_vrTorchEntity.angles );
+	VectorCopy( VR_ModelAngles( angles ), g_vrTorchEntity.curstate.angles );
 	gEngfuncs.CL_CreateVisibleEntity( ET_NORMAL, &g_vrTorchEntity );
 }
 
@@ -468,9 +554,15 @@ static void VR_AddHandModel( int hand, const Vector &origin, const Vector &angle
 	entity->curstate.renderamt = 192;
 	VectorCopy( handOrigin, entity->origin );
 	VectorCopy( handOrigin, entity->curstate.origin );
-	VectorCopy( angles, entity->angles );
-	VectorCopy( angles, entity->curstate.angles );
+	VectorCopy( VR_ModelAngles( angles ), entity->angles );
+	VectorCopy( VR_ModelAngles( angles ), entity->curstate.angles );
 	gEngfuncs.CL_CreateVisibleEntity( ET_NORMAL, entity );
+}
+
+/* v_hand.mdl is a right hand only; the studio renderer mirrors the left one. */
+int VR_IsMirroredHandEntity( const struct cl_entity_s *entity )
+{
+	return entity && entity == &g_vrHandEntities[VR_CLIENT_HAND_LEFT];
 }
 
 static int VR_CanRenderPresentation( const ref_params_s *pparams )
@@ -511,16 +603,19 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 	}
 
 	/* Keep the server pose fresh when off-hand tracking is unavailable. */
-	VR_SendPoseUpdate( pparams, Vector( pparams->vieworg ) + pose.weaponOffset, pose.weaponAngles, pose.weaponVelocity,
+	/* Server contract: weapon angles in model convention (GetWeaponViewAngles
+	 * negates pitch), off-hand angles in view convention (used as-is). */
+	VR_SendPoseUpdate( pparams, Vector( pparams->vieworg ) + pose.weaponOffset, VR_ModelAngles( pose.weaponAngles ), pose.weaponVelocity,
 		Vector( pparams->vieworg ) + pose.supportOffset, pose.supportAngles );
 
 	pose.weaponOffset = Vector( pparams->vieworg ) + pose.weaponOffset;
 	VectorCopy( pose.weaponOffset, viewmodel->origin );
 	VectorCopy( pose.weaponOffset, viewmodel->curstate.origin );
 	VectorCopy( pose.weaponOffset, viewmodel->latched.prevorigin );
-	VectorCopy( pose.weaponAngles, viewmodel->angles );
-	VectorCopy( pose.weaponAngles, viewmodel->curstate.angles );
-	VectorCopy( pose.weaponAngles, viewmodel->latched.prevangles );
+	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->angles );
+	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->curstate.angles );
+	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->latched.prevangles );
+	VR_RefreshLaserSight( pose.weaponOffset, pose.weaponAngles ); /* keep the laser on the gun this frame */
 	VectorCopy( pose.weaponVelocity, viewmodel->curstate.velocity );
 
 	if( VR_CanRenderPresentation( pparams ) )
@@ -542,6 +637,7 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 					vec3_t forward;
 					gEngfuncs.pfnAngleVectors( pose.supportAngles, forward, NULL, NULL );
 					VectorAngles( -Vector( forward ), pose.supportAngles );
+					pose.supportAngles[PITCH] = -pose.supportAngles[PITCH]; /* model -> view convention */
 				}
 				VR_AddTorchModel( Vector( pparams->vieworg ) + pose.supportOffset, pose.supportAngles );
 			}
@@ -560,6 +656,8 @@ static int32_t VR_CLIENT_CALL VR_BuildUsercmdSidecar( const vr_client_usercmd_t 
 	memset( sample, 0, sizeof( *sample ) );
 	if( !VR_GetWeaponPose( cmd->viewangles[YAW], cmd->frametime, &pose ) )
 		return 0;
+	pose.weaponAngles = VR_WrapAngles( VR_ModelAngles( pose.weaponAngles )); /* see VR_UpdateViewmodel */
+	pose.supportAngles = VR_WrapAngles( pose.supportAngles );
 	for( index = 0; index < 3; ++index )
 	{
 		sample->weapon_position[index] = VR_UsercmdSidecarQuantize( pose.weaponOffset[index], 8.0f );
