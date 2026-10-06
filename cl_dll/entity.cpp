@@ -15,6 +15,7 @@
 #include "entity_types.h"
 #include "studio_event.h" // def. of mstudioevent_t
 #include "r_efx.h"
+#include "com_weapons.h"
 #include "event_api.h"
 #include "pm_defs.h"
 #include "pmtrace.h"	
@@ -544,6 +545,16 @@ fired during this frame, handle the event by it's tag ( e.g., muzzleflash, sound
 */
 void DLLEXPORT HUD_StudioEvent( const struct mstudioevent_s *event, const struct cl_entity_s *entity )
 {
+	// Muzzle flash events on the view model only for an anim the client itself set (prediction or
+	// the forced server weaponanim in HUD_WeaponsPostThink). On a server-side weapon switch (lastinv,
+	// weapon select) hlsdk-portable force-sends the new weapon's draw anim, which reaches the view
+	// entity one update before the new model does: the old model then starts its sequence with that
+	// index, and where that is a fire anim (Lambda1VR v_9mmAR 2/5/6/7, v_9mmhandgun 3/4) its frame-0
+	// muzzle flash showed at the start of every switch.
+	if( event->event >= 5001 && event->event <= 5031 && event->event % 10 == 1 &&
+		entity == gEngfuncs.GetViewModel() && entity->curstate.sequence != HUD_GetWeaponAnim() )
+		return;
+
 	switch( event->event )
 	{
 	case 5001:

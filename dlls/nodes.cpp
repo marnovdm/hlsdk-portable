@@ -1535,7 +1535,11 @@ void CTestHull::Spawn( entvars_t *pevMasterNode )
 //=========================================================
 void CTestHull::DropDelay( void )
 {
-	UTIL_CenterPrintAll( "Node Graph out of Date. Rebuilding..." );
+	// VR: a centre print lands on the floating HUD panel; keep it in the console instead
+	if( CVAR_GET_FLOAT( "vr_enable" ) != 0.0f )
+		ALERT( at_console, "Node Graph out of Date. Rebuilding...\n" );
+	else
+		UTIL_CenterPrintAll( "Node Graph out of Date. Rebuilding..." );
 
 	UTIL_SetOrigin( VARS( pev ), WorldGraph.m_pNodes[0].m_vecOrigin );
 

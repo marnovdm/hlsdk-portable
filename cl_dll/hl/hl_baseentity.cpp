@@ -32,6 +32,7 @@ This file contains "stubs" of class member implementations so that we can predic
 #include	"skill.h"
 #include	"cl_entity.h"
 #include	"../vr_client.h"
+#include	"../hud_iface.h"	// gEngfuncs (UTIL_MakeVectors)
 
 extern struct cl_entity_s *GetViewEntity( void );
 
@@ -80,7 +81,12 @@ void UTIL_PrecacheOther( const char *szClassname ) { }
 void UTIL_BloodDrips( const Vector &origin, const Vector &direction, int color, int amount ) { }
 void UTIL_DecalTrace( TraceResult *pTrace, int decalNumber ) { }
 void UTIL_GunshotDecalTrace( TraceResult *pTrace, int decalNumber ) { }
-void UTIL_MakeVectors( const Vector &vecAngles ) { }
+// Real implementation: VR code shared with the server (laser sight) relies on gpGlobals->v_forward.
+// Stock prediction only feeds the result into other client stubs, so this changes nothing there.
+void UTIL_MakeVectors( const Vector &vecAngles )
+{
+	gEngfuncs.pfnAngleVectors( vecAngles, gpGlobals->v_forward, gpGlobals->v_right, gpGlobals->v_up );
+}
 BOOL UTIL_IsValidEntity( edict_t *pent ) { return TRUE; }
 void UTIL_SetOrigin( entvars_t *, const Vector &org ) { }
 BOOL UTIL_GetNextBestWeapon( CBasePlayer *pPlayer, CBasePlayerItem *pCurrentWeapon ) { return TRUE; }
@@ -330,6 +336,10 @@ Vector CBasePlayer::GetWeaponViewAngles( void ) const
 	if( HasFreshVRPose() )
 		angles.x = -angles.x;
 	return angles;
+}
+Vector CBasePlayer::GetThrowVelocity( float factor, float maxSpeed ) const
+{
+	return GetWeaponVelocity() * factor; // prediction only; the server computes the real throw
 }
 Vector CBasePlayer::GetWeaponVelocity( void ) const
 {

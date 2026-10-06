@@ -483,7 +483,7 @@ void CPipeWrench::CheckPhysicalSwing(float speed)
 	RememberHitEntityThisSwing(pEntity);
 	m_flPhysicalHitCount += 1.0f;
 	ClearMultiDamage();
-	pEntity->TraceAttack(m_pPlayer->pev, gSkillData.plrDmgPWrench * (speed / PIPEWRENCH_MIN_PHYSICAL_SWING_SPEED) /
+	pEntity->TraceAttack(m_pPlayer->pev, gSkillData.plrDmgPWrench * Q_min( speed / PIPEWRENCH_MIN_PHYSICAL_SWING_SPEED, 2.0f ) / // capped like the crowbar
 		m_flPhysicalHitCount, gpGlobals->v_up, &tr, DMG_CLUB);
 	ApplyMultiDamage(m_pPlayer->pev, m_pPlayer->pev);
 

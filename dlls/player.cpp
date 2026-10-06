@@ -418,14 +418,15 @@ Vector CBasePlayer::GetGunPosition()
 
 BOOL CBasePlayer::HasFreshVRPose( void ) const
 {
-	return m_flVRPoseTime >= 0.0f && gpGlobals->time >= m_flVRPoseTime &&
-		gpGlobals->time - m_flVRPoseTime <= VR_POSE_FRESHNESS;
+	// usercmds run at the client's timebase, which can be ahead of the server time that string
+	// commands (vruse2) run at, so a pose can look slightly "from the future": compare both ways
+	return m_flVRPoseTime >= 0.0f && fabs( gpGlobals->time - m_flVRPoseTime ) <= VR_POSE_FRESHNESS;
 }
 
 BOOL CBasePlayer::HasFreshUsercmdVRPose( void ) const
 {
-	return m_flVRUsercmdPoseTime >= 0.0f && gpGlobals->time >= m_flVRUsercmdPoseTime &&
-		gpGlobals->time - m_flVRUsercmdPoseTime <= VR_POSE_FRESHNESS;
+	return m_flVRUsercmdPoseTime >= 0.0f &&
+		fabs( gpGlobals->time - m_flVRUsercmdPoseTime ) <= VR_POSE_FRESHNESS;
 }
 
 Vector CBasePlayer::GetWeaponPosition( void ) const
@@ -448,6 +449,18 @@ Vector CBasePlayer::GetWeaponViewAngles( void ) const
 	}
 
 	return pev->v_angle;
+}
+
+// VR throws use the hand's real speed. Half-Life is ~40 units per metre with twice Earth's gravity, so the
+// stock factors (0.4-0.7x hand speed) gave a fifth of a stock throw; vr_throw_scale multiplies them, and
+// the result is capped near the stock maximum for that weapon.
+Vector CBasePlayer::GetThrowVelocity( float factor, float maxSpeed ) const
+{
+	Vector velocity = GetWeaponVelocity() * ( factor * Q_max( 0.1f, CVAR_GET_FLOAT( "vr_throw_scale" )));
+	const float speed = velocity.Length();
+	if( speed > maxSpeed )
+		velocity = velocity * ( maxSpeed / speed );
+	return velocity;
 }
 
 Vector CBasePlayer::GetWeaponVelocity( void ) const
@@ -1853,8 +1866,13 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	}
 
 	TraceResult tr;
-	UTIL_TraceLine( handOrigin, EyePosition(), ignore_monsters, edict(), &tr );
-	if( pObject && !tr.fStartSolid && tr.flFraction == 1.0f )
+	// Line of sight from the eye to the hand, so the hand cannot use through a wall. Traced from
+	// the eye: a hand pressed against or into a button sits inside its brush, and a trace starting
+	// there is all-solid. Hitting the object itself on the way counts as reachable.
+	if( pObject )
+		UTIL_TraceLine( EyePosition(), handOrigin, ignore_monsters, edict(), &tr );
+	if( pObject && !tr.fStartSolid &&
+		( tr.flFraction == 1.0f || tr.pHit == pObject->edict() ) )
 	{
 		const int caps = pObject->ObjectCaps();
 		BOOL usingObject = FALSE;

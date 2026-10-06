@@ -415,7 +415,9 @@ void CCrowbar::CheckPhysicalSwing( float speed )
 
 	ClearMultiDamage();
 	pEntity->TraceAttack( m_pPlayer->pev,
-		gSkillData.plrDmgCrowbar * ( speed / CROWBAR_MIN_PHYSICAL_SWING_SPEED ) /
+		// speed is in game units/s (~40 per metre): uncapped, a normal swing did 4-8x the stock
+		// damage and gibbed zombies in one hit; cap at 2x so swing speed matters without one-shots
+		gSkillData.plrDmgCrowbar * Q_min( speed / CROWBAR_MIN_PHYSICAL_SWING_SPEED, 2.0f ) /
 			m_flPhysicalHitCount,
 		gpGlobals->v_up, &tr, DMG_CLUB );
 	ApplyMultiDamage( m_pPlayer->pev, m_pPlayer->pev );

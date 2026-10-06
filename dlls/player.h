@@ -224,6 +224,7 @@ public:
 	Vector GetWeaponAngles( void ) const;
 	Vector GetWeaponViewAngles( void ) const;
 	Vector GetWeaponVelocity( void ) const;
+	Vector GetThrowVelocity( float factor, float maxSpeed ) const;
 	Vector GetOffhandPosition( void ) const;
 	Vector GetOffhandAngles( void ) const;
 	BOOL IsWeaponUnderWater( void ) const;

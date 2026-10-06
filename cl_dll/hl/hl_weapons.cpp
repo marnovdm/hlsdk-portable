@@ -326,9 +326,53 @@ void CBasePlayerWeapon::KillLaser( void )
 	g_flLaserSightLastUpdate = flTime;
 }
 
+// Laser sight geometry from a gun pose (view-convention angles): where the beam starts (just past the
+// muzzle) and where it hits. The trace starts at the gun so the dot cannot pass through a wall.
+static void VR_LaserGeometry( const Vector &vecSrc, const Vector &vecAngles, int iMode, Vector &vecBeamSrc, Vector &vecHit )
+{
+	// UTIL_MakeVectors was an empty stub on the client: use the engine directly
+	Vector vecForward;
+	gEngfuncs.pfnAngleVectors( vecAngles, vecForward, NULL, NULL );
+	Vector vecEnd = vecSrc + vecForward * ( iMode == 1 ? 2048.0f : 8192.0f );
+	pmtrace_t trace;
+	TraceLaserSight( vecSrc, vecEnd, &trace );
+	vecHit = trace.endpos;
+	vecBeamSrc = vecSrc + vecForward * Q_min( 10.0f, ( vecHit - vecSrc ).Length() );
+}
+
+static float VR_LaserDotScale( void )
+{
+	return Q_max( 0.02f, gEngfuncs.pfnGetCvarFloat( "vr_laser_dot_scale" ));
+}
+
+// Called from VR_UpdateViewmodel with the gun pose of the frame being rendered. MakeLaser runs in
+// weapon prediction, earlier in the frame and with the previous frame's gun pose, so on its own the
+// beam lagged behind the gun when moving it, strafing or falling.
+void VR_RefreshLaserSight( const float *origin, const float *viewAngles )
+{
+	const int iMode = (int)gEngfuncs.pfnGetCvarFloat( "vr_lasersight" );
+	const float flTime = gEngfuncs.GetClientTime();
+	Vector vecBeamSrc, vecHit;
+
+	if( iMode < 1 || iMode > 2 || !( flTime >= g_flLaserSightLastUpdate && flTime < g_flLaserSightExpiry ))
+		return;
+	if( !g_pLaserSightBeam && !g_pLaserSightDot )
+		return;
+	VR_LaserGeometry( Vector( origin[0], origin[1], origin[2] ), Vector( viewAngles[0], viewAngles[1], viewAngles[2] ), iMode, vecBeamSrc, vecHit );
+	if( g_pLaserSightBeam )
+	{
+		g_pLaserSightBeam->source = vecBeamSrc;
+		g_pLaserSightBeam->target = vecHit;
+		g_pLaserSightBeam->delta = g_pLaserSightBeam->target - g_pLaserSightBeam->source;
+	}
+	if( g_pLaserSightDot )
+		g_pLaserSightDot->entity.origin = vecHit;
+}
+
 void CBasePlayerWeapon::MakeLaser( void )
 {
-	const int iMode = (int)CVAR_GET_FLOAT( "vr_lasersight" );
+	// client side: g_engfuncs is a stub table here, CVAR_GET_FLOAT would call NULL
+	const int iMode = (int)gEngfuncs.pfnGetCvarFloat( "vr_lasersight" );
 	const float flTime = gEngfuncs.GetClientTime();
 
 	// The RPG owns its guidance dot; do not add a second, independent sight.
@@ -342,16 +386,12 @@ void CBasePlayerWeapon::MakeLaser( void )
 	if( !g_runfuncs )
 		return;
 
-	Vector vecAngles = m_pPlayer->GetWeaponViewAngles();
-	UTIL_MakeVectors( vecAngles );
-	Vector vecSrc = m_pPlayer->GetWeaponPosition();
-	Vector vecEnd = vecSrc + gpGlobals->v_forward * ( iMode == 1 ? 2048.0f : 8192.0f );
-	pmtrace_t trace;
-	TraceLaserSight( vecSrc, vecEnd, &trace );
+	Vector vecBeamSrc, vecHit;
+	VR_LaserGeometry( m_pPlayer->GetWeaponPosition(), m_pPlayer->GetWeaponViewAngles(), iMode, vecBeamSrc, vecHit );
 
-	const int iModelIndex = gEngfuncs.pEventAPI->EV_FindModelIndex(
-		iMode == 1 ? "sprites/laserbeam.spr" : "sprites/laserdot.spr" );
-	if( iModelIndex <= 0 )
+	const int iBeamModel = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/laserbeam.spr" );
+	const int iDotModel = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/laserdot.spr" );
+	if( iDotModel <= 0 || ( iMode == 1 && iBeamModel <= 0 ))
 	{
 		KillLaser();
 		return;
@@ -359,45 +399,46 @@ void CBasePlayerWeapon::MakeLaser( void )
 
 	const float flLifetime = 0.1f;
 	const BOOL bEffectIsCurrent = flTime >= g_flLaserSightLastUpdate && flTime < g_flLaserSightExpiry;
+	const float flBeamWidth = Q_max( 0.05f, gEngfuncs.pfnGetCvarFloat( "vr_laser_width" ));
 
+	// mode 1: beam with a dot where it hits; mode 2: dot only
 	if( iMode == 1 )
 	{
-		if( g_pLaserSightDot && bEffectIsCurrent )
-			g_pLaserSightDot->die = 0.0f;
-		g_pLaserSightDot = NULL;
-
 		if( !g_pLaserSightBeam || !bEffectIsCurrent )
 		{
-			g_pLaserSightBeam = gEngfuncs.pEfxAPI->R_BeamPoints( vecSrc, trace.endpos,
-				iModelIndex, flLifetime, 3.0f, 0.0f, 96.0f / 255.0f, 255.0f, 0, 0.0f,
+			g_pLaserSightBeam = gEngfuncs.pEfxAPI->R_BeamPoints( vecBeamSrc, vecHit,
+				iBeamModel, flLifetime, flBeamWidth, 0.0f, 96.0f / 255.0f, 255.0f, 0, 0.0f,
 				214.0f / 255.0f, 34.0f / 255.0f, 34.0f / 255.0f );
 		}
 		else
 		{
-			g_pLaserSightBeam->source = vecSrc;
-			g_pLaserSightBeam->target = trace.endpos;
+			g_pLaserSightBeam->source = vecBeamSrc;
+			g_pLaserSightBeam->target = vecHit;
+			// point beams only compute delta at creation (gl_beams.c); without this the far end stays put
+			g_pLaserSightBeam->delta = g_pLaserSightBeam->target - g_pLaserSightBeam->source;
+			g_pLaserSightBeam->width = flBeamWidth;
 			g_pLaserSightBeam->die = flTime + flLifetime;
 		}
 	}
 	else
 	{
-		Vector vecZero;
-
 		if( g_pLaserSightBeam && bEffectIsCurrent )
 			g_pLaserSightBeam->die = 0.0f;
 		g_pLaserSightBeam = NULL;
+	}
 
-		if( !g_pLaserSightDot || !bEffectIsCurrent )
-		{
-			g_pLaserSightDot = gEngfuncs.pEfxAPI->R_TempSprite( trace.endpos, vecZero,
-				0.5f, iModelIndex, kRenderGlow, kRenderFxNoDissipation, 1.0f, flLifetime,
-				FTENT_SPRCYCLE | FTENT_PERSIST );
-		}
-		else
-		{
-			g_pLaserSightDot->entity.origin = trace.endpos;
-			g_pLaserSightDot->die = flTime + flLifetime;
-		}
+	if( !g_pLaserSightDot || !bEffectIsCurrent )
+	{
+		Vector vecZero;
+		g_pLaserSightDot = gEngfuncs.pEfxAPI->R_TempSprite( vecHit, vecZero,
+			VR_LaserDotScale(), iDotModel, kRenderGlow, kRenderFxNoDissipation, 1.0f, flLifetime,
+			FTENT_SPRCYCLE | FTENT_PERSIST );
+	}
+	else
+	{
+		g_pLaserSightDot->entity.origin = vecHit;
+		g_pLaserSightDot->entity.curstate.scale = VR_LaserDotScale();
+		g_pLaserSightDot->die = flTime + flLifetime;
 	}
 
 	g_flLaserSightExpiry = flTime + flLifetime;
@@ -462,8 +503,6 @@ Handles weapon firing, reloading, etc.
 */
 void CBasePlayerWeapon::ItemPostFrame( void )
 {
-	MakeLaser();
-
 	if( ( m_fInReload ) && ( m_pPlayer->m_flNextAttack <= 0.0f ) )
 	{
 #if 1
@@ -712,6 +751,8 @@ HUD_InitClientWeapons
 Set up weapons, player and functions needed to run weapons code client-side.
 =====================
 */
+static void stub_ClientCommand( edict_t *pEdict, const char *szFmt, ... ) { }
+
 void HUD_InitClientWeapons( void )
 {
 	static int initialized = 0;
@@ -742,6 +783,9 @@ void HUD_InitClientWeapons( void )
 	g_engfuncs.pfnPrecacheEvent = gEngfuncs.pfnPrecacheEvent;
 	g_engfuncs.pfnRandomFloat = gEngfuncs.pfnRandomFloat;
 	g_engfuncs.pfnRandomLong = gEngfuncs.pfnRandomLong;
+	g_engfuncs.pfnCVarGetFloat = gEngfuncs.pfnGetCvarFloat;
+	// Server-to-client commands (e.g. VR haptics) are sent by the real server; no-op here, not NULL
+	g_engfuncs.pfnClientCommand = stub_ClientCommand;
 
 	// Allocate a slot for the local player
 	HUD_PrepEntity( &player, NULL );
@@ -1048,6 +1092,9 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	if( ( player.pev->deadflag != ( DEAD_DISCARDBODY + 1 ) ) && 
 		 !CL_IsDead() && player.pev->viewmodel && !g_iUser1 )
 	{
+		// every frame, not only when ItemPostFrame runs: it pauses while m_flNextAttack > 0
+		// (deploy after a weapon switch, reloads), and the laser sight lapsed meanwhile
+		pWeapon->MakeLaser();
 		if( player.m_flNextAttack <= 0 )
 		{
 			pWeapon->ItemPostFrame();
