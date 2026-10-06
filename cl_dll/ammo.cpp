@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "vr_client.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "pm_shared.h"
@@ -962,11 +963,13 @@ int CHudAmmo::Draw( float flTime )
 	if( m_pWeapon->iAmmoType > 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
+		int iRowX;
 
 		if( pw->iClip >= 0 )
 		{
 			// room for the number and the '|' and the current ammo
 			x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
+			iRowX = x;
 			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, pw->iClip, r, g, b );
 
 			/*wrect_t rc;
@@ -994,6 +997,7 @@ int CHudAmmo::Draw( float flTime )
 		{
 			// SPR_Draw a bullets only line
 			x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
+			iRowX = x;
 			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
 		}
 
@@ -1001,6 +1005,8 @@ int CHudAmmo::Draw( float flTime )
 		int iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
 		SPR_Set( m_pWeapon->hAmmo, r, g, b );
 		SPR_DrawAdditive( 0, x, y - iOffset, &m_pWeapon->rcAmmo );
+		VR_HudBoxAdd( VR_HUD_BOX_AMMO, iRowX, y - iOffset, x + iIconWidth - iRowX,
+			Q_max( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top, gHUD.m_iFontHeight + iOffset ));
 	}
 
 	// Does weapon have seconday ammo?
@@ -1012,13 +1018,15 @@ int CHudAmmo::Draw( float flTime )
 		if( ( pw->iAmmo2Type != 0 ) && ( gWR.CountAmmo( pw->iAmmo2Type ) > 0 ) )
 		{
 			y -= gHUD.m_iFontHeight + gHUD.m_iFontHeight / 4;
-			x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
-			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmo2Type ), r, g, b );
+			int iRowX = ScreenWidth - 4 * AmmoWidth - iIconWidth;
+			x = gHUD.DrawHudNumber( iRowX, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmo2Type ), r, g, b );
 
 			// Draw the ammo Icon
 			SPR_Set( m_pWeapon->hAmmo2, r, g, b );
 			int iOffset = ( m_pWeapon->rcAmmo2.bottom - m_pWeapon->rcAmmo2.top) / 8;
 			SPR_DrawAdditive(0, x, y - iOffset, &m_pWeapon->rcAmmo2 );
+			VR_HudBoxAdd( VR_HUD_BOX_AMMO, iRowX, y - iOffset, x + iIconWidth - iRowX,
+				Q_max( m_pWeapon->rcAmmo2.bottom - m_pWeapon->rcAmmo2.top, gHUD.m_iFontHeight + iOffset ));
 		}
 	}
 	return 1;
