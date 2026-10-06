@@ -243,6 +243,9 @@ int CHudHealth::Draw( float flTime )
 		int iWidth = HealthWidth / 10;
 		UnpackRGB( r, g, b, RGB_YELLOWISH );
 		FillRGBA( x, y + gHUD.m_iHudNumbersYOffset, iWidth, iHeight, r, g, b, a );
+		VR_HudBoxAdd( VR_HUD_BOX_HEALTH, CrossWidth / 2, y, x + iWidth - CrossWidth / 2,
+			Q_max( gHUD.GetSpriteRect( m_HUD_cross ).bottom - gHUD.GetSpriteRect( m_HUD_cross ).top,
+			iHeight + gHUD.m_iHudNumbersYOffset ));
 	}
 
 	DrawDamage( flTime );

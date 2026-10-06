@@ -322,6 +322,9 @@ void VR_Init()
 	CVAR_CREATE( "vr_hand_model", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_laser_width", "0.3", FCVAR_ARCHIVE ); // gun laser beam width (was a fixed 0.75)
 	CVAR_CREATE( "vr_laser_dot_scale", "0.12", FCVAR_ARCHIVE ); // laser dot sprite scale (was a fixed 0.5)
+	CVAR_CREATE( "vr_hud_health_rect", "", 0 ); // published by VR_HudBoxPublish, read by the renderer
+	CVAR_CREATE( "vr_hud_suit_rect", "", 0 );
+	CVAR_CREATE( "vr_hud_ammo_rect", "", 0 );
 	CVAR_CREATE( "vr_headtorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_reversetorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "hand", "0", FCVAR_ARCHIVE );
@@ -345,6 +348,65 @@ void VR_UpdateCurrentWeapon( long weapon )
 int VR_IsActive()
 {
 	return ( g_vrFrame.flags & VR_CLIENT_FRAME_ACTIVE ) != 0;
+}
+
+static struct
+{
+	int x0, y0, x1, y1;
+	bool valid;
+	char published[64];
+} g_vrHudBoxes[VR_HUD_BOX_COUNT];
+static const char *const g_vrHudBoxCvars[VR_HUD_BOX_COUNT] = { "vr_hud_health_rect", "vr_hud_suit_rect", "vr_hud_ammo_rect" };
+
+int VR_HandHudActive()
+{
+	return VR_IsActive() && gEngfuncs.pfnGetCvarFloat( "vr_hud_hands" ) != 0.0f;
+}
+
+void VR_HudBoxBegin()
+{
+	for( int i = 0; i < VR_HUD_BOX_COUNT; ++i )
+		g_vrHudBoxes[i].valid = false;
+}
+
+void VR_HudBoxAdd( int box, int x, int y, int width, int height )
+{
+	if( box < 0 || box >= VR_HUD_BOX_COUNT || width <= 0 || height <= 0 )
+		return;
+	if( !g_vrHudBoxes[box].valid )
+	{
+		g_vrHudBoxes[box].x0 = x;
+		g_vrHudBoxes[box].y0 = y;
+		g_vrHudBoxes[box].x1 = x + width;
+		g_vrHudBoxes[box].y1 = y + height;
+		g_vrHudBoxes[box].valid = true;
+		return;
+	}
+	g_vrHudBoxes[box].x0 = Q_min( g_vrHudBoxes[box].x0, x );
+	g_vrHudBoxes[box].y0 = Q_min( g_vrHudBoxes[box].y0, y );
+	g_vrHudBoxes[box].x1 = Q_max( g_vrHudBoxes[box].x1, x + width );
+	g_vrHudBoxes[box].y1 = Q_max( g_vrHudBoxes[box].y1, y + height );
+}
+
+/* "x y width height screenwidth screenheight" in HUD pixels, or "" when nothing was drawn (or the hand HUD is
+ * off). Only written when it changes. */
+void VR_HudBoxPublish()
+{
+	const int active = VR_HandHudActive();
+
+	for( int i = 0; i < VR_HUD_BOX_COUNT; ++i )
+	{
+		char value[64] = "";
+
+		if( active && g_vrHudBoxes[i].valid )
+			snprintf( value, sizeof( value ), "%d %d %d %d %d %d", g_vrHudBoxes[i].x0, g_vrHudBoxes[i].y0,
+				g_vrHudBoxes[i].x1 - g_vrHudBoxes[i].x0, g_vrHudBoxes[i].y1 - g_vrHudBoxes[i].y0, ScreenWidth, ScreenHeight );
+		if( strcmp( value, g_vrHudBoxes[i].published ))
+		{
+			gEngfuncs.Cvar_Set( g_vrHudBoxCvars[i], value );
+			snprintf( g_vrHudBoxes[i].published, sizeof( g_vrHudBoxes[i].published ), "%s", value );
+		}
+	}
 }
 
 int VR_GetDominantHand()
