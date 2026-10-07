@@ -399,16 +399,35 @@ int CHudHealth::DrawDamage( float flTime )
 
 	ScaleColors( r, g, b, a );
 
+	// VR hand HUD: the icons go next to health/suit on the off hand, so draw them in a row (newest first, i.e.
+	// in the order of the desktop column from the bottom) instead of a column, and report the row
+	const bool vrRow = VR_HandHudActive() != 0;
+	int rowX = giDmgWidth / 8;
+
 	// check for bits that should be expired
 	for( i = 0; i < NUM_DMG_TYPES; i++ )
 	{
 		if( m_bitsDamage & giDmgFlags[i] )
 		{
+			int x, y;
+
 			pdmg = &m_dmg[i];
+			x = pdmg->x;
+			y = pdmg->y;
+			if( vrRow )
+			{
+				int pos = 0;
+				for( int j = 0; j < NUM_DMG_TYPES; j++ )
+					if( j != i && ( m_bitsDamage & giDmgFlags[j] ) && m_dmg[j].y > pdmg->y )
+						pos++;
+				x = rowX + pos * ( giDmgWidth + giDmgWidth / 8 );
+				y = ScreenHeight - giDmgHeight * 2;
+				VR_HudBoxAdd( VR_HUD_BOX_DAMAGE, x, y, giDmgWidth, giDmgHeight );
+			}
 
 			// Draw all the items
 			SPR_Set( gHUD.GetSprite( m_HUD_dmg_bio + i ), r, g, b );
-			SPR_DrawAdditive( 0, pdmg->x, pdmg->y, &gHUD.GetSpriteRect( m_HUD_dmg_bio + i ) );
+			SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect( m_HUD_dmg_bio + i ) );
 
 			pdmg->fExpire = Q_min( flTime + DMG_IMAGE_LIFE, pdmg->fExpire );
 

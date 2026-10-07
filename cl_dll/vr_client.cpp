@@ -325,6 +325,7 @@ void VR_Init()
 	CVAR_CREATE( "vr_hud_health_rect", "", 0 ); // published by VR_HudBoxPublish, read by the renderer
 	CVAR_CREATE( "vr_hud_suit_rect", "", 0 );
 	CVAR_CREATE( "vr_hud_ammo_rect", "", 0 );
+	CVAR_CREATE( "vr_hud_damage_rect", "", 0 );
 	CVAR_CREATE( "vr_hud_weapons_rect", "", 0 );
 	CVAR_CREATE( "vr_hud_weapons2_rect", "", 0 );
 	CVAR_CREATE( "vr_hud_weapons3_rect", "", 0 );
@@ -361,7 +362,7 @@ static struct
 	char published[64];
 } g_vrHudBoxes[VR_HUD_BOX_COUNT];
 static const char *const g_vrHudBoxCvars[VR_HUD_BOX_COUNT] = { "vr_hud_health_rect", "vr_hud_suit_rect", "vr_hud_ammo_rect",
-	"vr_hud_weapons_rect", "vr_hud_weapons2_rect", "vr_hud_weapons3_rect" };
+	"vr_hud_damage_rect", "vr_hud_weapons_rect", "vr_hud_weapons2_rect", "vr_hud_weapons3_rect" };
 
 int VR_HandHudActive()
 {
