@@ -42,6 +42,44 @@ WeaponsResource gWR;
 
 int g_weaponselect = 0;
 
+// VR pointer weapon grid: +vr_weaponpointer while left Triangle (Y) is held. The grid goes onto a panel on the
+// off hand, the renderer reports where the weapon hand points at it (vr_weapon_pointer_cursor, HUD pixels) and
+// releasing switches to the weapon under the pointer.
+static bool g_vrWeaponPointer;
+static WEAPON *g_vrPointerHover;
+
+static void VR_WeaponPointerDown( void )
+{
+	if( gHUD.m_fPlayerDead || ( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL )) ||
+		!( gHUD.m_iWeaponBits & ( 1 << ( WEAPON_SUIT ))))
+		return;
+	g_vrWeaponPointer = true;
+	g_vrPointerHover = NULL;
+	gpActiveSel = (WEAPON *)1;
+	PlaySound( "common/wpn_hudon.wav", 1 );
+}
+
+// "-vr_weaponpointer cancel" (engine: menu opened, focus lost) closes without switching
+static void VR_WeaponPointerUp( void )
+{
+	WEAPON *p = g_vrPointerHover;
+
+	if( !g_vrWeaponPointer )
+		return;
+	g_vrWeaponPointer = false;
+	g_vrPointerHover = NULL;
+	if( p && !( gEngfuncs.Cmd_Argc() > 1 && !strcmp( gEngfuncs.Cmd_Argv( 1 ), "cancel" )))
+	{
+		ServerCmd( p->szName );
+		g_weaponselect = p->iId;
+		gpLastSel = p;
+		PlaySound( "common/wpn_select.wav", 1 );
+	}
+	else
+		PlaySound( "common/wpn_hudoff.wav", 1 );
+	gpActiveSel = NULL;
+}
+
 void WeaponsResource::LoadAllWeaponSprites( void )
 {
 	for( int i = 0; i < MAX_WEAPONS; i++ )
@@ -284,6 +322,8 @@ int CHudAmmo::Init( void )
 	HOOK_COMMAND( "invprev", PrevWeapon );
 	HOOK_COMMAND( "invnextslot", NextWeaponSlot );
 	HOOK_COMMAND( "invprevslot", PrevWeaponSlot );
+	gEngfuncs.pfnAddCommand( "+vr_weaponpointer", VR_WeaponPointerDown );
+	gEngfuncs.pfnAddCommand( "-vr_weaponpointer", VR_WeaponPointerUp );
 
 	Reset();
 
@@ -1097,6 +1137,9 @@ int CHudAmmo::DrawWList( float flTime )
 {
 	int r, g, b, x, y, a, i;
 
+	if( g_vrWeaponPointer )
+		return DrawPointerWList();
+
 	if( !gpActiveSel )
 		return 0;
 
@@ -1242,6 +1285,122 @@ int CHudAmmo::DrawWList( float flTime )
 		}
 	}
 
+	return 1;
+}
+
+//
+// VR pointer weapon grid: every slot expanded (HL's list only expands the selected slot, so hovering would shift
+// the columns under the pointer); columns wrap onto a second row when they do not fit the HUD width. The grid
+// is reported as VR_HUD_BOX_WEAPONS and the renderer moves it onto the off-hand panel.
+//
+int CHudAmmo::DrawPointerWList( void )
+{
+	int r, g, b, i;
+	int colX[MAX_WEAPON_SLOTS], colY[MAX_WEAPON_SLOTS], colW[MAX_WEAPON_SLOTS];
+	int x = 10, y = 10, bottom = 10, right = 10;
+	int cx = 0, cy = 0;
+	bool cursor = sscanf( gEngfuncs.pfnGetCvarString( "vr_weapon_pointer_cursor" ), "%d %d", &cx, &cy ) == 2;
+	WEAPON *hover = NULL;
+
+	// layout
+	for( i = 0; i < MAX_WEAPON_SLOTS; i++ )
+	{
+		int w = giBucketWidth, h = giBucketHeight + 5;
+
+		for( int iPos = 0; iPos < MAX_WEAPON_POSITIONS; iPos++ )
+		{
+			WEAPON *p = gWR.GetWeaponSlot( i, iPos );
+
+			if( !p || !p->iId )
+				continue;
+			w = Q_max( w, p->rcActive.right - p->rcActive.left );
+			h += p->rcActive.bottom - p->rcActive.top + 5;
+		}
+		if( x > 10 && x + w > ScreenWidth - 10 )
+		{
+			x = 10;
+			y = bottom + 10;
+		}
+		colX[i] = x;
+		colY[i] = y;
+		colW[i] = w;
+		bottom = Q_max( bottom, y + h );
+		right = Q_max( right, x + w );
+		x += w + 5;
+	}
+
+	// what the weapon hand points at (cells include the gaps, so the highlight does not flicker between icons)
+	for( i = 0; i < MAX_WEAPON_SLOTS && cursor; i++ )
+	{
+		int cellY = colY[i] + giBucketHeight + 5;
+
+		for( int iPos = 0; iPos < MAX_WEAPON_POSITIONS; iPos++ )
+		{
+			WEAPON *p = gWR.GetWeaponSlot( i, iPos );
+			int h;
+
+			if( !p || !p->iId )
+				continue;
+			h = p->rcActive.bottom - p->rcActive.top + 5;
+			if( cx >= colX[i] && cx < colX[i] + colW[i] + 5 && cy >= cellY && cy < cellY + h && gWR.HasAmmo( p ))
+				hover = p;
+			cellY += h;
+		}
+	}
+	if( hover != g_vrPointerHover )
+	{
+		if( hover )
+		{
+			PlaySound( "common/wpn_moveselect.wav", 1 );
+			VR_Haptic( 15.0f, VR_GetDominantHand(), 0.3f );
+		}
+		g_vrPointerHover = hover;
+	}
+	gpActiveSel = hover ? hover : (WEAPON *)1;
+
+	for( i = 0; i < MAX_WEAPON_SLOTS; i++ )
+	{
+		x = colX[i];
+		y = colY[i];
+		UnpackRGB( r, g, b, RGB_YELLOWISH );
+		ScaleColors( r, g, b, hover && hover->iSlot == i ? 255 : 192 );
+		SPR_Set( gHUD.GetSprite( m_HUD_bucket0 + i ), r, g, b );
+		SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect( m_HUD_bucket0 + i ));
+		y += giBucketHeight + 5;
+
+		for( int iPos = 0; iPos < MAX_WEAPON_POSITIONS; iPos++ )
+		{
+			WEAPON *p = gWR.GetWeaponSlot( i, iPos );
+
+			if( !p || !p->iId )
+				continue;
+
+			UnpackRGB( r, g, b, RGB_YELLOWISH );
+			if( p == hover )
+			{
+				SPR_Set( p->hActive, r, g, b );
+				SPR_DrawAdditive( 0, x, y, &p->rcActive );
+				SPR_Set( gHUD.GetSprite( m_HUD_selection ), r, g, b );
+				SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect( m_HUD_selection ));
+			}
+			else
+			{
+				if( gWR.HasAmmo( p ))
+					ScaleColors( r, g, b, p == m_pWeapon ? 255 : 160 );
+				else
+				{
+					UnpackRGB( r, g, b, RGB_REDISH );
+					ScaleColors( r, g, b, 128 );
+				}
+				SPR_Set( p->hInactive, r, g, b );
+				SPR_DrawAdditive( 0, x, y, &p->rcInactive );
+			}
+			DrawAmmoBar( p, x + giABWidth / 2, y, giABWidth, giABHeight );
+			y += p->rcActive.bottom - p->rcActive.top + 5;
+		}
+	}
+
+	VR_HudBoxAdd( VR_HUD_BOX_WEAPONS, 10, 10, right - 10, bottom - 10 );
 	return 1;
 }
 

@@ -325,6 +325,8 @@ void VR_Init()
 	CVAR_CREATE( "vr_hud_health_rect", "", 0 ); // published by VR_HudBoxPublish, read by the renderer
 	CVAR_CREATE( "vr_hud_suit_rect", "", 0 );
 	CVAR_CREATE( "vr_hud_ammo_rect", "", 0 );
+	CVAR_CREATE( "vr_hud_weapons_rect", "", 0 );
+	CVAR_CREATE( "vr_weapon_pointer_cursor", "", 0 ); // set by the renderer: "x y" HUD pixels the weapon hand points at on the grid
 	CVAR_CREATE( "vr_weapon_backface_culling", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_headtorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_reversetorch", "0", FCVAR_ARCHIVE );
@@ -357,7 +359,8 @@ static struct
 	bool valid;
 	char published[64];
 } g_vrHudBoxes[VR_HUD_BOX_COUNT];
-static const char *const g_vrHudBoxCvars[VR_HUD_BOX_COUNT] = { "vr_hud_health_rect", "vr_hud_suit_rect", "vr_hud_ammo_rect" };
+static const char *const g_vrHudBoxCvars[VR_HUD_BOX_COUNT] = { "vr_hud_health_rect", "vr_hud_suit_rect", "vr_hud_ammo_rect",
+	"vr_hud_weapons_rect" };
 
 int VR_HandHudActive()
 {
@@ -399,7 +402,8 @@ void VR_HudBoxPublish()
 	{
 		char value[64] = "";
 
-		if( active && g_vrHudBoxes[i].valid )
+		/* the weapon grid only exists for the hand panel, so it does not depend on vr_hud_hands */
+		if(( i == VR_HUD_BOX_WEAPONS ? VR_IsActive() : active ) && g_vrHudBoxes[i].valid )
 			snprintf( value, sizeof( value ), "%d %d %d %d %d %d", g_vrHudBoxes[i].x0, g_vrHudBoxes[i].y0,
 				g_vrHudBoxes[i].x1 - g_vrHudBoxes[i].x0, g_vrHudBoxes[i].y1 - g_vrHudBoxes[i].y0, ScreenWidth, ScreenHeight );
 		if( strcmp( value, g_vrHudBoxes[i].published ))
