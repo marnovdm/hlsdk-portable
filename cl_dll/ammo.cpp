@@ -1290,14 +1290,17 @@ int CHudAmmo::DrawWList( float flTime )
 
 //
 // VR pointer weapon grid: every slot expanded (HL's list only expands the selected slot, so hovering would shift
-// the columns under the pointer); columns wrap onto a second row when they do not fit the HUD width. The grid
-// is reported as VR_HUD_BOX_WEAPONS and the renderer moves it onto the off-hand panel.
+// the columns under the pointer). Columns wrap onto a new row when they do not fit the HUD width; each row is
+// reported as its own box (VR_HUD_BOX_WEAPONS + row) and the renderer puts the rows side by side again on the
+// off-hand panel, so the grid there is always a single row.
 //
 int CHudAmmo::DrawPointerWList( void )
 {
 	int r, g, b, i;
+	const int maxRows = VR_HUD_BOX_WEAPONS_LAST - VR_HUD_BOX_WEAPONS + 1;
 	int colX[MAX_WEAPON_SLOTS], colY[MAX_WEAPON_SLOTS], colW[MAX_WEAPON_SLOTS];
-	int x = 10, y = 10, bottom = 10, right = 10;
+	int rowTop[maxRows], rowBottom[maxRows], rowRight[maxRows];
+	int x = 10, y = 10, row = 0;
 	int cx = 0, cy = 0;
 	bool cursor = sscanf( gEngfuncs.pfnGetCvarString( "vr_weapon_pointer_cursor" ), "%d %d", &cx, &cy ) == 2;
 	WEAPON *hover = NULL;
@@ -1316,16 +1319,22 @@ int CHudAmmo::DrawPointerWList( void )
 			w = Q_max( w, p->rcActive.right - p->rcActive.left );
 			h += p->rcActive.bottom - p->rcActive.top + 5;
 		}
-		if( x > 10 && x + w > ScreenWidth - 10 )
+		if( x > 10 && x + w > ScreenWidth - 10 && row < maxRows - 1 )
 		{
 			x = 10;
-			y = bottom + 10;
+			y = rowBottom[row] + 10;
+			row++;
+		}
+		if( x == 10 )
+		{
+			rowTop[row] = y;
+			rowBottom[row] = y;
 		}
 		colX[i] = x;
 		colY[i] = y;
 		colW[i] = w;
-		bottom = Q_max( bottom, y + h );
-		right = Q_max( right, x + w );
+		rowBottom[row] = Q_max( rowBottom[row], y + h );
+		rowRight[row] = x + w;
 		x += w + 5;
 	}
 
@@ -1400,7 +1409,8 @@ int CHudAmmo::DrawPointerWList( void )
 		}
 	}
 
-	VR_HudBoxAdd( VR_HUD_BOX_WEAPONS, 10, 10, right - 10, bottom - 10 );
+	for( i = 0; i <= row; i++ )
+		VR_HudBoxAdd( VR_HUD_BOX_WEAPONS + i, 10, rowTop[i], rowRight[i] - 10, rowBottom[i] - rowTop[i] );
 	return 1;
 }
 
