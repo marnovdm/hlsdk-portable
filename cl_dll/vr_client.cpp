@@ -321,7 +321,7 @@ void VR_Init()
 	CVAR_CREATE( "vr_flashlight_model", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_hand_model", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_laser_width", "0.3", FCVAR_ARCHIVE ); // gun laser beam width (was a fixed 0.75)
-	CVAR_CREATE( "vr_laser_dot_scale", "0.12", FCVAR_ARCHIVE ); // laser dot sprite scale (was a fixed 0.5)
+	CVAR_CREATE( "vr_laser_dot_scale", "0.08", FCVAR_ARCHIVE ); // laser dot sprite scale (was a fixed 0.5)
 	CVAR_CREATE( "vr_hud_health_rect", "", 0 ); // published by VR_HudBoxPublish, read by the renderer
 	CVAR_CREATE( "vr_hud_suit_rect", "", 0 );
 	CVAR_CREATE( "vr_hud_ammo_rect", "", 0 );
