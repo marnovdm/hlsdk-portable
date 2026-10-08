@@ -111,8 +111,6 @@ int CHudFlashlight::Draw( float flTime )
 	}
 	if( !show )
 		return 1;
-	if( VR_HandHudActive() )
-		return 1;	// the hand HUD drops the icon: the beam shows whether the flashlight is on
 
 	int r, g, b, x, y, a;
 	wrect_t rc;
@@ -137,6 +135,14 @@ int CHudFlashlight::Draw( float flTime )
 
 	y = ( m_prc1->bottom - m_prc2->top ) / 2;
 	x = ScreenWidth - m_iWidth - m_iWidth / 2 ;
+
+	// VR hand HUD: the renderer moves the icon next to health/suit on the off hand. The box always includes the
+	// beam's place, so the panel does not change size when the flashlight is switched on or off.
+	if( VR_HandHudActive() )
+	{
+		const int iBeamRight = Q_min( ScreenWidth, ScreenWidth - m_iWidth / 2 + ( m_prcBeam->right - m_prcBeam->left ));
+		VR_HudBoxAdd( VR_HUD_BOX_FLASHLIGHT, x, y, iBeamRight - x, m_prc1->bottom - m_prc1->top );
+	}
 
 	// Draw the flashlight casing
 	SPR_Set( m_hSprite1, r, g, b );
