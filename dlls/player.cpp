@@ -1798,6 +1798,28 @@ void CBasePlayer::PlayerUse( void )
 	m_bVRUse2Released = FALSE;
 }
 
+// A turned brush entity's absolute box spans its whole turning radius, far beyond the model. A mounted gun
+// (taken by touching it, see CFuncTank::ObjectCaps) is therefore only touched when the hand is in the
+// model's own box, rotated with the gun, so it does not take the use from a button next to it.
+static BOOL IsMountedGun( CBaseEntity *pObject )
+{
+	const char *classname = STRING( pObject->pev->classname );
+	return !strncmp( classname, "func_tank", 9 ) && strcmp( classname, "func_tankcontrols" );
+}
+
+static BOOL HandTouchesMountedGun( CBaseEntity *pObject, const Vector &hand )
+{
+	const float margin = 6.0f;
+	Vector forward, right, up;
+	UTIL_MakeVectorsPrivate( pObject->pev->angles, forward, right, up );
+	const Vector delta = hand - pObject->pev->origin;
+	const Vector local( DotProduct( delta, forward ), -DotProduct( delta, right ), DotProduct( delta, up ) );
+	const Vector &mins = pObject->pev->mins, &maxs = pObject->pev->maxs;
+	return local.x > mins.x - margin && local.x < maxs.x + margin &&
+		local.y > mins.y - margin && local.y < maxs.y + margin &&
+		local.z > mins.z - margin && local.z < maxs.z + margin;
+}
+
 #define PLAYER_HAND_SEARCH_RADIUS (float)64
 #define PLAYER_HAND_GESTURE_SEARCH_RADIUS (float)24
 
@@ -1817,11 +1839,21 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	{
 		if( pObject->ObjectCaps() & ( FCAP_IMPULSE_USE | FCAP_CONTINUOUS_USE | FCAP_ONOFF_USE ) )
 		{
-			vecLOS = VecBModelOrigin( pObject->pev ) - handOrigin;
-			vecLOS = UTIL_ClampVectorToBox( vecLOS, pObject->pev->size * 0.5 );
-			// A hand inside the object's box clamps to a zero vector, which never passed the dot test:
-			// reaching into a gun's control volume or pressing deep into a button counts as a direct hit
-			const float dot = vecLOS == g_vecZero ? 1.0f : DotProduct( vecLOS, gpGlobals->v_forward );
+			float dot;
+			if( IsMountedGun( pObject ) )
+			{
+				if( !HandTouchesMountedGun( pObject, handOrigin ) )
+					continue;
+				dot = 1.0f;
+			}
+			else
+			{
+				vecLOS = VecBModelOrigin( pObject->pev ) - handOrigin;
+				vecLOS = UTIL_ClampVectorToBox( vecLOS, pObject->pev->size * 0.5 );
+				// A hand inside the object's box clamps to a zero vector, which never passed the dot test:
+				// reaching into a gun's control volume or pressing deep into a button counts as a direct hit
+				dot = vecLOS == g_vecZero ? 1.0f : DotProduct( vecLOS, gpGlobals->v_forward );
+			}
 			if( dot > flMaxDot )
 			{
 				pClosest = pObject;
