@@ -63,7 +63,10 @@ public:
 	void StopRotSound( void );
 
 	// Bmodels don't go across transitions
-	virtual int ObjectCaps( void ) { return CBaseEntity :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION; }
+	// VR: a player-controllable gun can also be taken by touching the gun itself; its func_tankcontrols
+	// volume is a thin slab at the gun's back, easy to reach past with a hand
+	virtual int ObjectCaps( void ) { return ( CBaseEntity :: ObjectCaps() & ~FCAP_ACROSS_TRANSITION ) |
+		( ( pev->spawnflags & SF_TANK_CANCONTROL ) ? FCAP_IMPULSE_USE : 0 ); }
 
 	inline BOOL IsActive( void ) { return (pev->spawnflags & SF_TANK_ACTIVE)?TRUE:FALSE; }
 	inline void TankActivate( void ) { pev->spawnflags |= SF_TANK_ACTIVE; pev->nextthink = pev->ltime + 0.1f; m_fireLast = 0; }

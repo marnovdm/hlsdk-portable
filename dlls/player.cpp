@@ -1819,10 +1819,13 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 		{
 			vecLOS = VecBModelOrigin( pObject->pev ) - handOrigin;
 			vecLOS = UTIL_ClampVectorToBox( vecLOS, pObject->pev->size * 0.5 );
-			if( DotProduct( vecLOS, gpGlobals->v_forward ) > flMaxDot )
+			// A hand inside the object's box clamps to a zero vector, which never passed the dot test:
+			// reaching into a gun's control volume or pressing deep into a button counts as a direct hit
+			const float dot = vecLOS == g_vecZero ? 1.0f : DotProduct( vecLOS, gpGlobals->v_forward );
+			if( dot > flMaxDot )
 			{
 				pClosest = pObject;
-				flMaxDot = DotProduct( vecLOS, gpGlobals->v_forward );
+				flMaxDot = dot;
 			}
 		}
 	}
