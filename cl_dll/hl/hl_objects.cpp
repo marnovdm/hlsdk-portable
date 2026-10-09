@@ -14,6 +14,7 @@
 ****/
 
 #include "../hud.h"
+#include "../vr_client.h"
 #include "../cl_util.h"
 #include "../demo.h"
 
@@ -46,9 +47,11 @@ void UpdateBeams( void )
 	// Determine our last predicted origin
 	HUD_GetLastOrg( (float *)&origin );
 
-	AngleVectors( angles, forward, right, up );
-
 	VectorCopy( origin, vecSrc );
+	// VR: along the gun, not the head (the server's beam already goes there)
+	VR_GetWeaponAim( vecSrc, angles );
+
+	AngleVectors( angles, forward, right, up );
 
 	VectorMA( vecSrc, 2048, forward, vecEnd );
 

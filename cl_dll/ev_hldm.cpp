@@ -1468,10 +1468,11 @@ void EV_EgonFire( event_args_t *args )
 		if( pl )
 		{
 			VectorCopy( gHUD.m_vecAngles, angles );
+			EV_GetGunPosition( args, vecSrc, pl->origin );
+			// VR: along the gun, not the head (the server's beam already goes there)
+			VR_GetWeaponAim( vecSrc, angles );
 
 			AngleVectors( angles, forward, right, up );
-
-			EV_GetGunPosition( args, vecSrc, pl->origin );
 
 			VectorMA( vecSrc, 2048, forward, vecEnd );
 
