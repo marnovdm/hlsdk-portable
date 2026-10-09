@@ -417,6 +417,20 @@ void VR_HudBoxPublish()
 	}
 }
 
+int VR_GetWeaponAim( float *origin, float *angles )
+{
+	cl_entity_t *viewmodel;
+
+	if( !VR_IsActive() || !( viewmodel = gEngfuncs.GetViewModel() ) || !viewmodel->model )
+		return 0;
+	VectorCopy( viewmodel->curstate.origin, origin );
+	/* the viewmodel carries model angles (pitch negated, VR_ModelAngles) */
+	angles[PITCH] = -viewmodel->curstate.angles[PITCH];
+	angles[YAW] = viewmodel->curstate.angles[YAW];
+	angles[ROLL] = 0.0f;
+	return 1;
+}
+
 int VR_GetDominantHand()
 {
 	return CVAR_GET_FLOAT( "hand" ) >= 0.5f ? VR_CLIENT_HAND_LEFT : VR_CLIENT_HAND_RIGHT;
