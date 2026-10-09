@@ -277,6 +277,7 @@ BOOL CFuncTank::StartControl( CBasePlayer *pController )
 
 	m_pController->m_iHideHUD |= HIDEHUD_WEAPONS;
 	m_vecControllerUsePos = m_pController->pev->origin;
+	m_bVRGrabbed = FALSE;
 
 	pev->nextthink = pev->ltime + 0.1f;
 
@@ -302,6 +303,7 @@ void CFuncTank::StopControl()
 
 	m_pController->m_pTank = NULL;
 	m_pController = NULL;
+	m_bVRGrabbed = FALSE;
 
 	if( IsActive() )
 		pev->nextthink = pev->ltime + 1.0f;
@@ -392,6 +394,42 @@ void CFuncTank::Think( void )
 		StopRotSound();
 }
 
+// Grab aiming: the gun turns about its pivot by as much as the hand has swung around that pivot since
+// the aim was taken, so the handles stay in the hand (hand right = barrel left, hand up = barrel down,
+// like the real thing). Angles are returned in UTIL_VecToAngles convention, as TrackTarget expects.
+BOOL CFuncTank::VRGrabAim( Vector &angles )
+{
+	if( CVAR_GET_FLOAT( "vr_tank_grab" ) == 0.0f || !m_pController->HasFreshVRPose() )
+	{
+		m_bVRGrabbed = FALSE;
+		return FALSE;
+	}
+
+	const Vector delta = m_pController->GetWeaponPosition() - pev->origin;
+	const float flat = delta.Length2D();
+	if( flat < 4.0f )
+	{
+		// hand right over the pivot: no usable direction, hold the current aim
+		angles = Vector( -pev->angles.x, pev->angles.y, 0 );
+		return TRUE;
+	}
+
+	const float yaw = atan2( delta.y, delta.x ) * ( 180.0f / M_PI );
+	const float pitch = atan2( delta.z, flat ) * ( 180.0f / M_PI );
+	if( !m_bVRGrabbed )
+	{
+		m_bVRGrabbed = TRUE;
+		m_flVRGrabYaw = yaw;
+		m_flVRGrabPitch = pitch;
+		m_vecVRGrabAngles = pev->angles;
+	}
+
+	angles.y = m_vecVRGrabAngles.y + UTIL_AngleDistance( yaw, m_flVRGrabYaw );
+	angles.x = -m_vecVRGrabAngles.x - UTIL_AngleDistance( pitch, m_flVRGrabPitch );
+	angles.z = 0;
+	return TRUE;
+}
+
 void CFuncTank::TrackTarget( void )
 {
 	TraceResult tr;
@@ -403,9 +441,13 @@ void CFuncTank::TrackTarget( void )
 	// Get a position to aim for
 	if( m_pController )
 	{
-		// Tanks mirror the controller pose when it is fresh, otherwise view angles.
-		angles = m_pController->GetWeaponViewAngles();
-		angles[0] = 0 - angles[0];
+		// VR: the gun's near end follows the hand (vr_tank_grab 1); otherwise the gun points where the
+		// controller points when its pose is fresh, else along the view angles.
+		if( !VRGrabAim( angles ) )
+		{
+			angles = m_pController->GetWeaponViewAngles();
+			angles[0] = 0 - angles[0];
+		}
 		pev->nextthink = pev->ltime + 0.05f;
 	}
 	else

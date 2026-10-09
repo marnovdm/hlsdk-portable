@@ -103,6 +103,14 @@ protected:
 	float		m_flNextAttack;
 	Vector		m_vecControllerUsePos;
 
+	// VR grab aiming (vr_tank_grab): hand position around the pivot when the aim was taken, and the gun's
+	// angles then. Not saved: zero after a load, so the grab is simply taken again.
+	BOOL		VRGrabAim( Vector &angles );
+	BOOL		m_bVRGrabbed;
+	float		m_flVRGrabYaw;
+	float		m_flVRGrabPitch;
+	Vector		m_vecVRGrabAngles;
+
 	float		m_yawCenter;	// "Center" yaw
 	float		m_yawRate;		// Max turn rate to track targets
 	float		m_yawRange;		// Range of turning motion (one-sided: 30 is +/- 30 degress from center)
