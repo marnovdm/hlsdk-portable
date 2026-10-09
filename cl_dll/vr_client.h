@@ -24,6 +24,8 @@ void VR_HudBoxBegin();
 void VR_HudBoxAdd( int box, int x, int y, int width, int height );
 void VR_HudBoxPublish();
 int VR_GetDominantHand();
+/* VR: the gun's position and aim (view angles) as drawn this frame; 0 when not in VR or no viewmodel */
+int VR_GetWeaponAim( float *origin, float *angles );
 int VR_IsWeaponStabilised();
 int VR_ShouldApplyWeaponRecoil();
 void VR_Haptic( float durationMilliseconds, unsigned int hand, float amplitude );
