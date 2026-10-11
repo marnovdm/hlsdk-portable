@@ -582,6 +582,11 @@ void CRpg::UpdateSpot( void )
 		UTIL_TraceLine( vecSrc, vecSrc + vecAiming * 8192.0f, dont_ignore_monsters, ENT( m_pPlayer->pev ), &tr );
 
 		UTIL_SetOrigin( m_pSpot->pev, tr.vecEndPos );
+
+		// The spot is a kRenderFxNoDissipation glow sprite: a fixed size in the world, so at range it
+		// shrank to a speck (Xen's Nihilanth crystals). Grow it with distance beyond 256 units so it
+		// keeps about the size it has there on screen.
+		m_pSpot->pev->scale = Q_max( 1.0f, ( tr.vecEndPos - m_pPlayer->EyePosition() ).Length() / 256.0f );
 	}
 #endif
 }

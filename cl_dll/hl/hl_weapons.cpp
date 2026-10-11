@@ -365,8 +365,11 @@ void CBasePlayerWeapon::MakeLaser( void )
 	const int iMode = (int)gEngfuncs.pfnGetCvarFloat( "vr_lasersight" );
 	const float flTime = gEngfuncs.GetClientTime();
 
-	// The RPG owns its guidance dot; do not add a second, independent sight.
-	if( !m_pPlayer || m_iId == WEAPON_RPG || iMode < 1 || iMode > 2 )
+	// The RPG owns its guidance dot (a server laser_spot the rockets steer to): it only gets the beam,
+	// and only while that spot is on. The spot alone is a fixed-size sprite that shrinks to a speck at
+	// range and lags the gun (server-updated), so far targets (Xen's Nihilanth crystals) were hard to aim at.
+	const BOOL bRpg = m_iId == WEAPON_RPG;
+	if( !m_pPlayer || iMode < 1 || iMode > 2 || ( bRpg && ( iMode != 1 || !( (CRpg *)this )->m_fSpotActive )))
 	{
 		KillLaser();
 		return;
@@ -417,7 +420,9 @@ void CBasePlayerWeapon::MakeLaser( void )
 		g_pLaserSightBeam = NULL;
 	}
 
-	if( !g_pLaserSightDot || !bEffectIsCurrent )
+	if( bRpg )
+		g_pLaserSightDot = NULL; // the stock laser_spot is the RPG's dot
+	else if( !g_pLaserSightDot || !bEffectIsCurrent )
 	{
 		Vector vecZero;
 		g_pLaserSightDot = gEngfuncs.pEfxAPI->R_TempSprite( vecHit, vecZero,
