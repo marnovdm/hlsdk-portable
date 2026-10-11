@@ -2714,9 +2714,35 @@ void PM_Jump( void )
 		{
 			pmove->punchangle[0] = -5;
 
+			vec3_t ljdir;
+
+			// VR: the usercmd angles carry only the body yaw (stick turning); the head yaw is folded
+			// into forwardmove/sidemove instead, so stock HL's view-forward launch veers off by however
+			// far the player stands turned from the recenter direction. Launch where the stick moves
+			// (or, without stick input, along the current ground velocity).
+			VectorCopy( pmove->forward, ljdir );
+			if( pm_vr_usercmd_sidecar_active && pm_vr_usercmd_sidecar.version == VR_USERCMD_SIDECAR_VERSION )
+			{
+				float yaw = pmove->angles[YAW] * ( M_PI / 180.0f );
+				float fwd[2], rgt[2];
+
+				// flat axes: the body pitch is the head pitch here, which would shorten forward vs side
+				fwd[0] = cos( yaw ); fwd[1] = sin( yaw );
+				rgt[0] = fwd[1]; rgt[1] = -fwd[0];
+				for( i = 0; i < 2; i++ )
+					ljdir[i] = fwd[i] * pmove->cmd.forwardmove + rgt[i] * pmove->cmd.sidemove;
+				if( ljdir[0] * ljdir[0] + ljdir[1] * ljdir[1] < 1.0f )
+				{
+					ljdir[0] = pmove->velocity[0];
+					ljdir[1] = pmove->velocity[1];
+				}
+				ljdir[2] = 0.0f;
+				VectorNormalize( ljdir );
+			}
+
 			for( i = 0; i < 2; i++ )
 			{
-				pmove->velocity[i] = pmove->forward[i] * PLAYER_LONGJUMP_SPEED * 1.6f;
+				pmove->velocity[i] = ljdir[i] * PLAYER_LONGJUMP_SPEED * 1.6f;
 			}
 
 			pmove->velocity[2] = sqrt( 2.0f * 800.0f * 56.0f );
