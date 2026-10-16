@@ -1848,6 +1848,37 @@ static BOOL HandTouchesMountedGun( CBaseEntity *pObject, const Vector &hand )
 		local.z > mins.z - margin && local.z < maxs.z + margin;
 }
 
+// A dial can be split into a display part and a separate control: ba_xen5's tuner knobs on the desk
+// are display-only (SF_MOMENTARY_DOOR), and the dial that takes the use is a small hidden one under
+// the desk, ~44 units away, which flat HL reaches through its view cone from the eye. A hand touching
+// the display part therefore uses the control that shares its target (they all turn together).
+#define PLAYER_HAND_DIAL_CONTROL_RADIUS (float)64
+#define PLAYER_HAND_DIAL_DISPLAY_RADIUS (float)16 // ~40 cm around the knob
+
+static CBaseEntity *FindDialControl( CBaseEntity *pDisplay, const Vector &hand )
+{
+	if( !FClassnameIs( pDisplay->pev, "momentary_rot_button" ) || FStringNull( pDisplay->pev->target ) )
+		return NULL;
+
+	CBaseEntity *pControl = NULL;
+	float best = PLAYER_HAND_DIAL_CONTROL_RADIUS;
+	edict_t *pent = NULL;
+	while( !FNullEnt( pent = FIND_ENTITY_BY_STRING( pent, "target", STRING( pDisplay->pev->target ) ) ) )
+	{
+		CBaseEntity *pEntity = CBaseEntity::Instance( pent );
+		if( !pEntity || pEntity == pDisplay || !FClassnameIs( pEntity->pev, "momentary_rot_button" ) ||
+			!( pEntity->ObjectCaps() & FCAP_CONTINUOUS_USE ) )
+			continue;
+		const float distance = ( VecBModelOrigin( pEntity->pev ) - hand ).Length();
+		if( distance < best )
+		{
+			pControl = pEntity;
+			best = distance;
+		}
+	}
+	return pControl;
+}
+
 #define PLAYER_HAND_SEARCH_RADIUS (float)64
 #define PLAYER_HAND_GESTURE_SEARCH_RADIUS (float)24
 
@@ -1891,6 +1922,28 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	}
 	pObject = pClosest;
 
+	// no usable object: a display-only dial near the hand stands in for its control. Picked by the
+	// distance to its pivot (the knob): a turned dial's abs box spans its turning radius, which for
+	// the tall ba_xen5 knob models covers both knobs at once.
+	CBaseEntity *pDisplay = NULL;
+	if( !pObject )
+	{
+		CBaseEntity *pCandidate = NULL;
+		float best = PLAYER_HAND_DIAL_DISPLAY_RADIUS;
+		while( ( pCandidate = UTIL_FindEntityInSphere( pCandidate, handOrigin, PLAYER_HAND_DIAL_DISPLAY_RADIUS ) ) != NULL )
+		{
+			const float distance = ( pCandidate->pev->origin - handOrigin ).Length();
+			if( distance >= best )
+				continue;
+			CBaseEntity *pControl = FindDialControl( pCandidate, handOrigin );
+			if( !pControl )
+				continue;
+			pDisplay = pCandidate;
+			pObject = pControl;
+			best = distance;
+		}
+	}
+
 	EHANDLE *lastHandle = offhand ? &m_hLastLocalUsableEntityAlt : &m_hLastLocalUsableEntity;
 	BOOL *usingEntity = offhand ? &m_bVRUsingEntityAlt : &m_bVRUsingEntity;
 
@@ -1907,7 +1960,10 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	if( pObject )
 		UTIL_TraceLine( EyePosition(), handOrigin, ignore_monsters, edict(), &tr );
 	if( pObject && !tr.fStartSolid &&
-		( tr.flFraction == 1.0f || tr.pHit == pObject->edict() ) )
+		( tr.flFraction == 1.0f || tr.pHit == pObject->edict() ||
+		// a hand on a display dial may sit in it or in the desk around it
+		( pDisplay && ( tr.pHit == pDisplay->edict() ||
+			( tr.vecEndPos - pDisplay->pev->origin ).Length() < PLAYER_HAND_DIAL_DISPLAY_RADIUS ) ) ) )
 	{
 		const int caps = pObject->ObjectCaps();
 		BOOL usingObject = FALSE;
