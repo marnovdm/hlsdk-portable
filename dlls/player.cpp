@@ -1879,6 +1879,21 @@ static CBaseEntity *FindDialControl( CBaseEntity *pDisplay, const Vector &hand )
 	return pControl;
 }
 
+#define PLAYER_HAND_OBJECT_MARGIN (float)8
+
+static BOOL TraceEndsAtObject( const TraceResult &tr, CBaseEntity *pObject )
+{
+	float distance = 0.0f;
+	for( int i = 0; i < 3; i++ )
+	{
+		const float below = pObject->pev->absmin[i] - tr.vecEndPos[i];
+		const float above = tr.vecEndPos[i] - pObject->pev->absmax[i];
+		const float outside = Q_max( Q_max( below, above ), 0.0f );
+		distance += outside * outside;
+	}
+	return distance <= PLAYER_HAND_OBJECT_MARGIN * PLAYER_HAND_OBJECT_MARGIN;
+}
+
 #define PLAYER_HAND_SEARCH_RADIUS (float)64
 #define PLAYER_HAND_GESTURE_SEARCH_RADIUS (float)24
 
@@ -1908,10 +1923,14 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 			else
 			{
 				vecLOS = VecBModelOrigin( pObject->pev ) - handOrigin;
-				vecLOS = UTIL_ClampVectorToBox( vecLOS, pObject->pev->size * 0.5 );
-				// A hand inside the object's box clamps to a zero vector, which never passed the dot test:
-				// reaching into a gun's control volume or pressing deep into a button counts as a direct hit
-				dot = vecLOS == g_vecZero ? 1.0f : DotProduct( vecLOS, gpGlobals->v_forward );
+				const Vector half = pObject->pev->size * 0.5f;
+				// A hand inside the object's box (reaching into a gun's control volume, pressing deep into a
+				// button or onto a desk control) counts as a direct hit, whichever way it points. Tested here:
+				// UTIL_ClampVectorToBox normalizes, and the SDK's Normalize turns the zero vector into (0,0,1)
+				if( fabs( vecLOS.x ) <= half.x && fabs( vecLOS.y ) <= half.y && fabs( vecLOS.z ) <= half.z )
+					dot = 1.0f;
+				else
+					dot = DotProduct( UTIL_ClampVectorToBox( vecLOS, half ), gpGlobals->v_forward );
 			}
 			if( dot > flMaxDot )
 			{
@@ -1961,6 +1980,9 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 		UTIL_TraceLine( EyePosition(), handOrigin, ignore_monsters, edict(), &tr );
 	if( pObject && !tr.fStartSolid &&
 		( tr.flFraction == 1.0f || tr.pHit == pObject->edict() ||
+		// a non-solid control is never hit: a hand on one (of6a2's mortar controls, 7 units wide) sits
+		// in the panel around it, and a control set in a wall is behind its face
+		TraceEndsAtObject( tr, pObject ) ||
 		// a hand on a display dial may sit in it or in the desk around it
 		( pDisplay && ( tr.pHit == pDisplay->edict() ||
 			( tr.vecEndPos - pDisplay->pev->origin ).Length() < PLAYER_HAND_DIAL_DISPLAY_RADIUS ) ) ) )
