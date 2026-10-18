@@ -338,7 +338,7 @@ void VR_Init()
 	CVAR_CREATE( "vr_weapon_backface_culling", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_headtorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_nightvision_tint", "1", FCVAR_ARCHIVE );
-	CVAR_CREATE( "vr_nightvision_backing", "0.85", FCVAR_ARCHIVE );
+	CVAR_CREATE( "vr_nightvision_backing", "0.95", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_reversetorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "hand", "0", FCVAR_ARCHIVE );
 	gEngfuncs.pfnAddCommand( "vr_haptic", VR_ServerHapticCommand );
