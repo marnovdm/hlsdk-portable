@@ -94,6 +94,18 @@ int CHudNightvision::MsgFunc_Flashlight( const char *pszName, int iSize, void *p
 
 int CHudNightvision::Draw(float flTime)
 {
+	// VR: the hand HUD panels are composited over the eye image, and on the bright night vision tint the
+	// green numbers were barely legible. The engine puts a dark backing behind them while the goggles are on.
+	{
+		static float s_flBacking = -1.0f;
+		const float flBacking = ( m_fOn && VR_IsActive() ) ? gEngfuncs.pfnGetCvarFloat( "vr_nightvision_backing" ) : 0.0f;
+		if( flBacking != s_flBacking )
+		{
+			gEngfuncs.Cvar_SetValue( "vr_hud_backing", flBacking );
+			s_flBacking = flBacking;
+		}
+	}
+
 	if (gHUD.m_iHideHUDDisplay & (HIDEHUD_FLASHLIGHT | HIDEHUD_ALL))
 		return 1;
 
