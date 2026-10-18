@@ -328,16 +328,24 @@ void CBasePlayerWeapon::KillLaser( void )
 
 // Laser sight geometry from a gun pose (view-convention angles): where the beam starts (just past the
 // muzzle) and where it hits. The trace starts at the gun so the dot cannot pass through a wall.
+// Where the beam leaves the gun, in the view model's frame (forward, left, up) from the hand; zero = the
+// default (10 units along the barrel). The Desert Eagle's beam starts at its laser module under the barrel
+// (front face of lam.bmp in v_desert_eagle.mdl).
+static Vector g_vecLaserBeamOffset;
+
 static void VR_LaserGeometry( const Vector &vecSrc, const Vector &vecAngles, int iMode, Vector &vecBeamSrc, Vector &vecHit )
 {
 	// UTIL_MakeVectors was an empty stub on the client: use the engine directly
-	Vector vecForward;
-	gEngfuncs.pfnAngleVectors( vecAngles, vecForward, NULL, NULL );
+	Vector vecForward, vecRight, vecUp;
+	gEngfuncs.pfnAngleVectors( vecAngles, vecForward, vecRight, vecUp );
 	Vector vecEnd = vecSrc + vecForward * ( iMode == 1 ? 2048.0f : 8192.0f );
 	pmtrace_t trace;
 	TraceLaserSight( vecSrc, vecEnd, &trace );
 	vecHit = trace.endpos;
-	vecBeamSrc = vecSrc + vecForward * Q_min( 10.0f, ( vecHit - vecSrc ).Length() );
+	if( g_vecLaserBeamOffset != g_vecZero )
+		vecBeamSrc = vecSrc + vecForward * g_vecLaserBeamOffset.x - vecRight * g_vecLaserBeamOffset.y + vecUp * g_vecLaserBeamOffset.z;
+	else
+		vecBeamSrc = vecSrc + vecForward * Q_min( 10.0f, ( vecHit - vecSrc ).Length() );
 }
 
 static float VR_LaserDotScale( void )
@@ -389,12 +397,17 @@ void CBasePlayerWeapon::MakeLaser( void )
 	if( !g_runfuncs )
 		return;
 
+	// The Desert Eagle has a laser module: show its beam from there even with the dot-only sight.
+	const BOOL bEagle = m_iId == WEAPON_EAGLE;
+	const int iBeamMode = bEagle ? 1 : iMode;
+	g_vecLaserBeamOffset = bEagle ? Vector( 6.4f, 0.08f, -1.55f ) : g_vecZero;
+
 	Vector vecBeamSrc, vecHit;
 	VR_LaserGeometry( m_pPlayer->GetWeaponPosition(), m_pPlayer->GetWeaponViewAngles(), iMode, vecBeamSrc, vecHit );
 
 	const int iBeamModel = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/laserbeam.spr" );
 	const int iDotModel = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/laserdot.spr" );
-	if( iDotModel <= 0 || ( iMode == 1 && iBeamModel <= 0 ))
+	if( iDotModel <= 0 || ( iBeamMode == 1 && iBeamModel <= 0 ))
 	{
 		KillLaser();
 		return;
@@ -405,7 +418,7 @@ void CBasePlayerWeapon::MakeLaser( void )
 	const float flBeamWidth = Q_max( 0.05f, gEngfuncs.pfnGetCvarFloat( "vr_laser_width" ));
 
 	// mode 1: beam with a dot where it hits; mode 2: dot only
-	if( iMode == 1 )
+	if( iBeamMode == 1 )
 	{
 		if( !g_pLaserSightBeam || !bEffectIsCurrent )
 		{
