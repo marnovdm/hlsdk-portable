@@ -471,9 +471,17 @@ void CPipeWrench::CheckPhysicalSwing(float speed)
 {
 	TraceResult tr;
 	UTIL_MakeVectors(m_pPlayer->GetWeaponViewAngles());
-	const Vector vecSrc = m_pPlayer->GetWeaponPosition();
+	Vector vecSrc = m_pPlayer->GetWeaponPosition();
 	const Vector vecEnd = vecSrc + gpGlobals->v_up * PIPEWRENCH_PHYSICAL_LENGTH;
 	UTIL_TraceLine(vecSrc, vecEnd, dont_ignore_monsters, ENT(m_pPlayer->pev), &tr);
+	// The hand is often already inside the wall or crate when the swing gets fast enough
+	// (arms reach past the player hull), so the trace started solid and the hit was lost:
+	// no damage, no sound. Then trace from the eyes to the head of the weapon instead.
+	if (tr.fStartSolid || tr.fAllSolid)
+	{
+		vecSrc = m_pPlayer->EyePosition();
+		UTIL_TraceLine(vecSrc, vecEnd, dont_ignore_monsters, ENT(m_pPlayer->pev), &tr);
+	}
 	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction >= 1.0f)
 		return;
 
