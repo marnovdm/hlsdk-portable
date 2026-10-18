@@ -152,11 +152,13 @@ int CHudNightvision::Draw(float flTime)
 	return 1;
 }
 
-/* Night vision in VR: an additive green box around the view origin, drawn in the
- * transparent pass of each eye, so it covers the whole view in both eyes. The box is
- * smaller than the player hull, so walls do not cut into it. Strength: the desktop
- * overlay's average (scanline sprite ~75% lit, HUD green, alpha 225) times
- * vr_nightvision_tint. */
+/* Night vision in VR: an additive green quad facing this eye, just past the engine's
+ * near plane (4 units) and wider than the widest eye frustum (PS VR2: tangent 1.83 out,
+ * 1.33 up/down), drawn in the transparent pass of each eye. A world-aligned box around
+ * the eye was clipped by the near plane at the image edges. Nothing solid comes closer
+ * than 4.5 units inside the view (the hull and the lean clamp keep walls >= 12 units
+ * away). Strength: the desktop overlay's average (scanline sprite ~75% lit, HUD green,
+ * alpha 225) times vr_nightvision_tint. */
 void VR_DrawNightvision( void )
 {
 	if( !gHUD.m_Nightvision.m_fOn || !VR_IsActive() ||
@@ -172,32 +174,29 @@ void VR_DrawNightvision( void )
 	UnpackRGB( r, g, b, RGB_YELLOWISH );
 	const float k = 0.75f * ( 225.0f / 255.0f ) * scale / 255.0f;
 
-	vec3_t eye;
-	IEngineStudio.GetViewInfo( eye, NULL, NULL, NULL ); // this eye's render origin
-	const float s = 6.0f;
-	static const int faces[6][4] = {
-		{ 0, 1, 3, 2 }, { 4, 6, 7, 5 }, { 0, 4, 5, 1 },
-		{ 2, 3, 7, 6 }, { 0, 2, 6, 4 }, { 1, 5, 7, 3 } };
-	vec3_t corner[8];
-	for( int i = 0; i < 8; ++i )
+	vec3_t eye, up, right, forward;
+	IEngineStudio.GetViewInfo( eye, up, right, forward ); // this eye's render origin and axes
+	const float depth = 4.5f, extent = depth * 4.0f;
+	vec3_t corner[4];
+	for( int i = 0; i < 4; ++i )
 	{
-		corner[i][0] = eye[0] + (( i & 4 ) ? s : -s );
-		corner[i][1] = eye[1] + (( i & 2 ) ? s : -s );
-		corner[i][2] = eye[2] + (( i & 1 ) ? s : -s );
+		const float sx = ( i == 1 || i == 2 ) ? extent : -extent;
+		const float sy = ( i >= 2 ) ? extent : -extent;
+		for( int c = 0; c < 3; ++c )
+			corner[i][c] = eye[c] + forward[c] * depth + right[c] * sx + up[c] * sy;
 	}
 
-	triangleapi_t *tri = gEngfuncs.pTriAPI;
-	tri->RenderMode( kRenderTransAdd );
-	tri->CullFace( TRI_NONE );
 	const struct model_s *white = gEngfuncs.GetSpritePointer( gHUD.m_Nightvision.m_hWhite );
 	if( !white )
 		return;
+	triangleapi_t *tri = gEngfuncs.pTriAPI;
+	tri->RenderMode( kRenderTransAdd );
+	tri->CullFace( TRI_NONE );
 	tri->SpriteTexture( (struct model_s *)white, 0 );
 	tri->Begin( TRI_QUADS );
 	tri->Color4f( r * k, g * k, b * k, 1.0f );
-	for( int f = 0; f < 6; ++f )
-		for( int v = 0; v < 4; ++v )
-			tri->Vertex3fv( corner[faces[f][v]] );
+	for( int v = 0; v < 4; ++v )
+		tri->Vertex3fv( corner[v] );
 	tri->End();
 	tri->RenderMode( kRenderNormal );
 	tri->CullFace( TRI_FRONT );
