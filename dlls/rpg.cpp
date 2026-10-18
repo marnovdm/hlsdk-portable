@@ -583,10 +583,10 @@ void CRpg::UpdateSpot( void )
 
 		UTIL_SetOrigin( m_pSpot->pev, tr.vecEndPos );
 
-		// The spot is a kRenderFxNoDissipation glow sprite: a fixed size in the world, so at range it
-		// shrank to a speck (Xen's Nihilanth crystals). Grow it with distance beyond 256 units so it
-		// keeps about the size it has there on screen.
-		m_pSpot->pev->scale = Q_max( 1.0f, ( tr.vecEndPos - m_pPlayer->EyePosition() ).Length() / 256.0f );
+		// The spot is a kRenderFxNoDissipation glow sprite: a fixed size in the world (16 units at scale 1),
+		// so at range it shrank to a speck (Xen's Nihilanth crystals) and up close it was a blob of ~8 degrees
+		// in VR. Scale it with distance so it keeps ~1.2 degrees on screen, with a small floor up close.
+		m_pSpot->pev->scale = Q_max( 0.15f, ( tr.vecEndPos - m_pPlayer->EyePosition() ).Length() / 750.0f );
 	}
 #endif
 }
