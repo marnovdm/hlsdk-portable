@@ -175,7 +175,15 @@ void CEagle::PrimaryAttack()
 	}
 	else
 	{
+		// Without its own laser the Eagle scatters ~6 degrees (stock). In VR the hand aims and the
+		// VR laser sight (vr_lasersight 1/2) shows where the barrel points, so with that sight on
+		// the shot goes where the dot is, as with the Eagle's laser. Fire rate stays stock.
 		flSpread = 0.1;
+#if !CLIENT_DLL
+		const int vrSight = (int)CVAR_GET_FLOAT( "vr_lasersight" );
+		if( m_pPlayer->HasFreshVRPose() && vrSight >= 1 && vrSight <= 2 )
+			flSpread = 0.001;
+#endif
 		vecDir = m_pPlayer->FireBulletsPlayer( 1, vecSrc, vecAiming, Vector(flSpread, flSpread, flSpread), 8192, BULLET_PLAYER_EAGLE, 0, 0, m_pPlayer->pev, m_pPlayer->random_seed );
 		m_flNextPrimaryAttack = UTIL_WeaponTimeBase()+ 0.22;
 	}
