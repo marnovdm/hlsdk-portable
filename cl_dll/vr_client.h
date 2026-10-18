@@ -11,6 +11,7 @@ void VR_UpdateCurrentWeapon( long weapon );
 void VR_UpdateViewmodel( struct ref_params_s *pparams );
 int VR_IsMirroredHandEntity( const struct cl_entity_s *entity );
 int VR_IsActive();
+void VR_DrawNightvision( void );
 /* Hand-mounted HUD (vr_hud_hands): health/suit and ammo report the screen boxes they drew, the renderer
  * moves those parts of the HUD onto small panels: health above suit on the off hand, ammo on the weapon hand. */
 /* VR_HUD_BOX_WEAPONS..+2: rows of the pointer weapon grid (+vr_weaponpointer), shown side by side on the off hand

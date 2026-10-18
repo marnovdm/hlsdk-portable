@@ -416,6 +416,8 @@ private:
 	HSPRITE m_hSprite1, m_hSprite2, m_hSprite3, m_hSprite4;
 
 	int m_fOn;
+	HSPRITE m_hWhite;
+	friend void VR_DrawNightvision( void );
 	int m_iFrame, m_nFrameCount;
 };
 

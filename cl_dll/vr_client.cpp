@@ -337,6 +337,7 @@ void VR_Init()
 	CVAR_CREATE( "vr_weapon_pointer_cursor", "", 0 ); // set by the renderer: "x y" HUD pixels the weapon hand points at on the grid
 	CVAR_CREATE( "vr_weapon_backface_culling", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_headtorch", "0", FCVAR_ARCHIVE );
+	CVAR_CREATE( "vr_nightvision_tint", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_reversetorch", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "hand", "0", FCVAR_ARCHIVE );
 	gEngfuncs.pfnAddCommand( "vr_haptic", VR_ServerHapticCommand );
@@ -613,9 +614,16 @@ static struct model_s *VR_ClientModel( struct model_s *cached, const char *name,
 	return gEngfuncs.CL_LoadModel( name, index );
 }
 
+/* Opposing Force has night vision goggles instead of a flashlight, so the off-hand
+ * stays a hand rather than holding the torch model. */
+static int VR_OffHandHasTorch( void )
+{
+	return 0;
+}
+
 static void VR_AddTorchModel( const Vector &origin, const Vector &angles )
 {
-	if( !gHUD.m_Flash.HasFlashlight() || !CVAR_GET_FLOAT( "vr_flashlight_model" ) ||
+	if( !VR_OffHandHasTorch() || !CVAR_GET_FLOAT( "vr_flashlight_model" ) ||
 		!gEngfuncs.CL_LoadModel || !gEngfuncs.CL_CreateVisibleEntity )
 		return;
 
@@ -727,7 +735,7 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 
 	if( VR_CanRenderPresentation( pparams ) )
 	{
-		const int hasFlashlight = gHUD.m_Flash.HasFlashlight();
+		const int hasFlashlight = VR_OffHandHasTorch();
 
 		/* Match Lambda1VR: the off-hand is empty only when it is neither
 		 * carrying the flashlight nor stabilising a weapon. */

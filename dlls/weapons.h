@@ -1250,6 +1250,9 @@ public:
 	int Swing(int fFirst);
 	BOOL Deploy(void);
 	void Holster(int skiplocal = 0);
+#if CLIENT_DLL
+	void MakeLaser( void ) { KillLaser(); }
+#endif
 #if CROWBAR_IDLE_ANIM
 	void WeaponIdle();
 #endif
@@ -1338,6 +1341,9 @@ public:
 	void SecondaryAttack(void);
 	BOOL Deploy(void);
 	void Holster(int skiplocal = 0);
+#if CLIENT_DLL
+	void MakeLaser( void ) { KillLaser(); }
+#endif
 	void WeaponIdle(void);
 	int m_fJustThrown;
 
@@ -1377,6 +1383,9 @@ public:
 	BOOL Deploy(void);
 	void WeaponIdle(void);
 	void Holster(int skiplocal = 0);
+#if CLIENT_DLL
+	void MakeLaser( void ) { KillLaser(); }
+#endif
 	void BigSwing(void);
 
 	int m_iSwing;
