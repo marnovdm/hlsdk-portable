@@ -588,14 +588,24 @@ static int VR_GetWeaponPose( float bodyYaw, float frametime, vr_weapon_pose_t *p
 	return 1;
 }
 
+/* The engine's model slots are reassigned when a new game starts after a menu background
+ * map (Opposing Force's ofboot0), so a cached model_t can end up holding another model
+ * (the hands drew as the crossbow clip). Look the model up again unless the cached one
+ * still has the right name. */
+static struct model_s *VR_ClientModel( struct model_s *cached, const char *name, int *index )
+{
+	if( cached && !strcmp( cached->name, name ))
+		return cached;
+	return gEngfuncs.CL_LoadModel( name, index );
+}
+
 static void VR_AddTorchModel( const Vector &origin, const Vector &angles )
 {
 	if( !gHUD.m_Flash.HasFlashlight() || !CVAR_GET_FLOAT( "vr_flashlight_model" ) ||
 		!gEngfuncs.CL_LoadModel || !gEngfuncs.CL_CreateVisibleEntity )
 		return;
 
-	if( !g_vrTorchModel )
-		g_vrTorchModel = gEngfuncs.CL_LoadModel( "models/v_torch.mdl", &g_vrTorchModelIndex );
+	g_vrTorchModel = VR_ClientModel( g_vrTorchModel, "models/v_torch.mdl", &g_vrTorchModelIndex );
 	if( !g_vrTorchModel )
 		return;
 
@@ -621,8 +631,7 @@ static void VR_AddHandModel( int hand, const Vector &origin, const Vector &angle
 		!gEngfuncs.CL_LoadModel || !gEngfuncs.CL_CreateVisibleEntity || !gEngfuncs.pfnAngleVectors )
 		return;
 
-	if( !g_vrHandModels[hand] )
-		g_vrHandModels[hand] = gEngfuncs.CL_LoadModel( "models/v_hand.mdl", &g_vrHandModelIndices[hand] );
+	g_vrHandModels[hand] = VR_ClientModel( g_vrHandModels[hand], "models/v_hand.mdl", &g_vrHandModelIndices[hand] );
 	if( !g_vrHandModels[hand] )
 		return;
 
