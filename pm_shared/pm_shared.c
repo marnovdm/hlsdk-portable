@@ -63,6 +63,14 @@ void PM_VRBeginUsercmdSidecar( const vr_usercmd_sidecar_t *sample )
 	}
 }
 
+/* the client says a hand holds a ladder (PM_VRHandClimb checks it is near one) */
+static int PM_VRClimbing( void )
+{
+	return pm_vr_usercmd_sidecar_active && pm_vr_usercmd_sidecar.version == VR_USERCMD_SIDECAR_VERSION &&
+		( pm_vr_usercmd_sidecar.flags & VR_USERCMD_SIDECAR_POSE_VALID ) &&
+		( pm_vr_usercmd_sidecar.flags & VR_USERCMD_SIDECAR_CLIMB );
+}
+
 void PM_VREndUsercmdSidecar( void )
 {
 	memset( &pm_vr_usercmd_sidecar, 0, sizeof( pm_vr_usercmd_sidecar ));
@@ -1689,7 +1697,9 @@ void PM_CatagorizePosition( void )
 	point[1] = pmove->origin[1];
 	point[2] = pmove->origin[2] - 2;
 
-	if( pmove->velocity[2] > 180 )   // Shooting up really fast.  Definitely not on ground.
+	// VR: a hand pulling the player up a ladder is slower than that; without this the player stays
+	// glued to the floor (the 2-unit drop below undoes each small step up)
+	if( pmove->velocity[2] > 180 || ( PM_VRClimbing() && pmove->velocity[2] > 0.0f ))   // Shooting up really fast.  Definitely not on ground.
 	{
 		pmove->onground = -1;
 	}
@@ -2315,6 +2325,91 @@ void PM_LadderMove( physent_t *pLadder )
 			}
 		}
 	}
+}
+
+/* VR hand climbing (after the Half-Life: VR mod): a hand that holds a ladder - grip pressed with
+ * the hand on it, held since; the client DLL keeps that state and sends it as CLIMB flags - moves
+ * the player by the opposite of its own movement, so pulling a hand down lifts the player. Only
+ * the hands' velocities are used, so the command replays the same way in prediction. A held
+ * ladder counts 36 units higher, to pull up over the ledge at its top. */
+#define VR_CLIMB_HAND_MARGIN 8.0f
+#define VR_CLIMB_LEDGE_HEIGHT 36.0f
+#define VR_CLIMB_MAX_SPEED 600.0f
+
+static physent_t *PM_VRLadderAtPoint( const vec3_t point )
+{
+	int i, j;
+
+	for( i = 0; i < pmove->nummoveent; i++ )
+	{
+		physent_t *pe = &pmove->moveents[i];
+		vec3_t mins, maxs;
+
+		if( !pe->model || (modtype_t)pmove->PM_GetModelType( pe->model ) != mod_brush || pe->skin != CONTENTS_LADDER )
+			continue;
+		pmove->PM_GetModelBounds( pe->model, mins, maxs );
+		for( j = 0; j < 3; j++ )
+		{
+			const float above = j == 2 ? VR_CLIMB_LEDGE_HEIGHT : 0.0f;
+			if( point[j] < pe->origin[j] + mins[j] - VR_CLIMB_HAND_MARGIN ||
+				point[j] > pe->origin[j] + maxs[j] + VR_CLIMB_HAND_MARGIN + above )
+				break;
+		}
+		if( j == 3 )
+			return pe;
+	}
+	return NULL;
+}
+
+static physent_t *PM_VRHandClimb( vec3_t velocity )
+{
+	const vr_usercmd_sidecar_t *sample = &pm_vr_usercmd_sidecar;
+	physent_t *ladder = NULL;
+	vec3_t eye;
+	int hand, count = 0;
+	float speed;
+
+	VectorClear( velocity );
+	if( !PM_VRClimbing())
+		return NULL;
+
+	VectorAdd( pmove->origin, pmove->view_ofs, eye );
+	for( hand = 0; hand < 2; hand++ )
+	{
+		const int16_t *offset = hand ? sample->offhand_position : sample->weapon_position;
+		const int16_t *handVelocity = hand ? sample->offhand_velocity : sample->weapon_velocity;
+		vec3_t point;
+		physent_t *pe;
+		int i;
+
+		if( !( sample->flags & ( hand ? VR_USERCMD_SIDECAR_CLIMB_OFFHAND : VR_USERCMD_SIDECAR_CLIMB_WEAPON )))
+			continue;
+		for( i = 0; i < 3; i++ )
+			point[i] = eye[i] + offset[i] * ( 1.0f / 8.0f );
+		if( !( pe = PM_VRLadderAtPoint( point )))
+			continue;
+		ladder = pe;
+		for( i = 0; i < 3; i++ )
+			velocity[i] -= handVelocity[i] * ( 1.0f / 8.0f );
+		count++;
+	}
+	if( !count )
+		return NULL;
+
+	VectorScale( velocity, 1.0f / count, velocity );
+	speed = Length( velocity );
+	if( speed > VR_CLIMB_MAX_SPEED )
+		VectorScale( velocity, VR_CLIMB_MAX_SPEED / speed, velocity );
+	return ladder;
+}
+
+static void PM_VRClimbMove( const vec3_t velocity )
+{
+	if( pmove->movetype == MOVETYPE_NOCLIP )
+		return;
+	pmove->movetype = MOVETYPE_FLY;
+	pmove->gravity = 0;
+	VectorCopy( velocity, pmove->velocity );
 }
 
 physent_t *PM_Ladder( void )
@@ -3099,6 +3194,8 @@ were contacted during the move.
 void PM_PlayerMove( qboolean server )
 {
 	physent_t *pLadder = NULL;
+	physent_t *vrClimbLadder = NULL;
+	vec3_t vrClimbVelocity;
 
 	// Are we running server code?
 	pmove->server = server;                
@@ -3157,6 +3254,10 @@ void PM_PlayerMove( qboolean server )
 	if( !pmove->dead && !( pmove->flags & FL_ONTRAIN ) )
 	{
 		pLadder = PM_Ladder();
+		// VR: a hand holding a ladder climbs (also when the body is not on it yet, or already above it);
+		// jump lets go
+		if( !( pmove->cmd.buttons & IN_JUMP ) && ( vrClimbLadder = PM_VRHandClimb( vrClimbVelocity )))
+			pLadder = vrClimbLadder;
 		if( pLadder )
 		{
 			g_onladder = 1;
@@ -3170,7 +3271,11 @@ void PM_PlayerMove( qboolean server )
 	// Don't run ladder code if dead or on a train
 	if( !pmove->dead && !( pmove->flags & FL_ONTRAIN ) )
 	{
-		if( pLadder )
+		if( vrClimbLadder )
+		{
+			PM_VRClimbMove( vrClimbVelocity );
+		}
+		else if( pLadder )
 		{
 			PM_LadderMove( pLadder );
 		}
