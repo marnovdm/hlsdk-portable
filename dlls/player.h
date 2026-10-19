@@ -362,8 +362,11 @@ private:
 	EHANDLE m_hLastLocalUsableEntityAlt;
 	BOOL m_bVRUsingEntity;
 	BOOL m_bVRUsingEntityAlt;
+	EHANDLE m_hVRTouchUse[2]; // what each hand (weapon, off hand) is touching, see VRTouchUse
 
 	void ClearVRUse2State( void );
+	void VRTouchUse( BOOL poseFresh );
+	void VRTouchUseHand( const Vector &hand, int index );
 	void ClearActionableHighlights( void );
 	void PlayerUseInternal( BOOL highlightActionables, const Vector &handOrigin,
 		const Vector &handAngles, BOOL useActive, BOOL usePressed, BOOL useReleased, BOOL offhand );
