@@ -1745,6 +1745,8 @@ void CBasePlayer::PlayerUse( void )
 	if( !highlightActionables )
 		ClearActionableHighlights();
 
+	VRTouchUse( poseFresh );
+
 	if( !highlightActionables && !primaryUseActive && !offhandUseActive )
 		return;
 
@@ -2000,6 +2002,101 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 	{
 		if( usePressed )
 			EMIT_SOUND( ENT( pev ), CHAN_ITEM, "common/wpn_denyselect.wav", 0.4, ATTN_NORM );
+	}
+}
+
+// Touch use (as in the Half-Life: VR mod): a hand that touches a button, a use-only door or a charger
+// uses it, no button or gesture needed. Brush entities only, so scientists and guards (use = follow)
+// and items keep needing the use button; mounted guns, pushables, dials and train controls too
+// (grabbing or turning, not pressing). Impulse controls fire once when the hand arrives (again
+// after it left), on/off ones are released when it leaves, chargers run while the hand stays.
+#define PLAYER_HAND_TOUCH_MARGIN (float)2 // ~5 cm around the brush
+
+static BOOL IsTouchUsable( CBaseEntity *pObject )
+{
+	const char *model = FStringNull( pObject->pev->model ) ? NULL : STRING( pObject->pev->model );
+	if( !pObject->IsBSPModel() || !model || model[0] != '*' )
+		return FALSE;
+	const char *classname = STRING( pObject->pev->classname );
+	if( !strncmp( classname, "func_tank", 9 ) || !strcmp( classname, "func_pushable" ) ||
+		!strcmp( classname, "momentary_rot_button" ) || !strcmp( classname, "momentary_door" ) )
+		return FALSE;
+	const int caps = pObject->ObjectCaps();
+	if( caps & FCAP_DIRECTIONAL_USE )
+		return FALSE;
+	if( caps & FCAP_CONTINUOUS_USE )
+		return !strcmp( classname, "func_healthcharger" ) || !strcmp( classname, "func_recharge" );
+	return ( caps & ( FCAP_IMPULSE_USE | FCAP_ONOFF_USE )) != 0;
+}
+
+static float HandDistanceOutsideBox( const Vector &hand, const Vector &mins, const Vector &maxs )
+{
+	float distance = 0.0f;
+	for( int i = 0; i < 3; i++ )
+	{
+		const float outside = Q_max( Q_max( mins[i] - hand[i], hand[i] - maxs[i] ), 0.0f );
+		distance += outside * outside;
+	}
+	return sqrt( distance );
+}
+
+void CBasePlayer::VRTouchUse( BOOL poseFresh )
+{
+	const BOOL active = poseFresh && IsAlive() && CVAR_GET_FLOAT( "vr_touch_use" ) != 0.0f;
+
+	VRTouchUseHand( active ? GetWeaponPosition() : g_vecZero, active ? 0 : -1 );
+	VRTouchUseHand( active ? GetOffhandPosition() : g_vecZero, active ? 1 : -2 );
+}
+
+// index 0/1 = weapon/off hand; -1/-2 = that hand stopped touching anything
+void CBasePlayer::VRTouchUseHand( const Vector &hand, int index )
+{
+	const int slot = index >= 0 ? index : -index - 1;
+	CBaseEntity *pTouched = NULL;
+
+	if( index >= 0 )
+	{
+		CBaseEntity *pObject = NULL;
+		float best = PLAYER_HAND_TOUCH_MARGIN;
+		while( ( pObject = UTIL_FindEntityInSphere( pObject, hand, PLAYER_HAND_TOUCH_MARGIN + 1.0f ) ) != NULL )
+		{
+			if( !IsTouchUsable( pObject ) )
+				continue;
+			const float distance = HandDistanceOutsideBox( hand, pObject->pev->absmin, pObject->pev->absmax );
+			if( distance > best )
+				continue;
+			// not through a wall: traced from the eye (a hand pressed into a button starts in solid),
+			// reaching the hand, the object, or the face it sits in
+			TraceResult tr;
+			UTIL_TraceLine( EyePosition(), hand, ignore_monsters, edict(), &tr );
+			if( tr.fStartSolid || !( tr.flFraction == 1.0f || tr.pHit == pObject->edict() || TraceEndsAtObject( tr, pObject ) ) )
+				continue;
+			pTouched = pObject;
+			best = distance;
+		}
+	}
+
+	CBaseEntity *pPrevious = m_hVRTouchUse[slot];
+	const int hapticHand = slot ? -2 : -1;
+	if( pTouched != pPrevious )
+	{
+		if( pPrevious && ( pPrevious->ObjectCaps() & FCAP_ONOFF_USE ) )
+			pPrevious->Use( this, this, USE_SET, 0 );
+		m_hVRTouchUse[slot] = pTouched;
+		if( pTouched )
+			ALERT( at_aiconsole, "VR touch use: %s hand at %.0f %.0f %.0f on %s (%s)\n", slot ? "off" : "weapon",
+				hand.x, hand.y, hand.z, STRING( pTouched->pev->classname ), STRING( pTouched->pev->target ) );
+		if( pTouched && !( pTouched->ObjectCaps() & FCAP_CONTINUOUS_USE ) )
+		{
+			CLIENT_COMMAND( edict(), "vr_haptic 250 %d 1\n", hapticHand );
+			pTouched->Use( this, this, USE_SET, 1 );
+		}
+	}
+	if( pTouched && ( pTouched->ObjectCaps() & FCAP_CONTINUOUS_USE ) )
+	{
+		m_afPhysicsFlags |= PFLAG_USING;
+		CLIENT_COMMAND( edict(), "vr_haptic 10 %d %f\n", hapticHand, sin( gpGlobals->time * 12.0f ) * 0.6f );
+		pTouched->Use( this, this, USE_SET, 1 );
 	}
 }
 
