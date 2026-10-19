@@ -484,8 +484,25 @@ static int VR_IsScopeWeapon( long weapon )
 	return weapon == WEAPON_CROSSBOW || weapon == WEAPON_SNIPERRIFLE;
 }
 
+/* Where the zoom lens sits on the weapon model's own scope: its eyepiece in the gun's frame (forward, right,
+ * up from the gun origin, game units) and its diameter - read off the idle pose of the view model. The engine
+ * puts the lens there (vr_scope_mount); empty = on the aim line in front of the eye. */
+static const char *VR_ScopeMount( long weapon )
+{
+	if( weapon == WEAPON_SNIPERRIFLE )
+		return "-5 0 2.8 2.4"; /* v_m40a1.mdl: scope tube 2.6 across, eyepiece 5 behind the grip */
+	return "";
+}
+
 static void VR_UpdateScope( float bodyYaw, const Vector &weaponOffset, int stabilised )
 {
+	static long mountWeapon = -1;
+	if( mountWeapon != g_vrCurrentWeapon )
+	{
+		mountWeapon = g_vrCurrentWeapon;
+		gEngfuncs.Cvar_Set( "vr_scope_mount", (char *)VR_ScopeMount( g_vrCurrentWeapon ));
+	}
+
 	Vector headOffset;
 	Vector unusedAngles;
 	float minimumScale;
