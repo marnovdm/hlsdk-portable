@@ -2342,13 +2342,14 @@ void PM_LadderMove( physent_t *pLadder )
  * ladder counts 36 units higher, to pull up over the ledge at its top. */
 #define VR_CLIMB_HAND_MARGIN 8.0f
 #define VR_CLIMB_LEDGE_HEIGHT 36.0f
+#define VR_CLIMB_LEDGE_REACH 24.0f /* above the top a hand may also be this far out: on the floor past the edge */
 #define VR_CLIMB_MAX_SPEED 600.0f
 /* Mantle: pulling up with the feet this close to the ladder's top, the hands carry the player over it - forward
  * towards the hands (they hold the top edge, in front) and up until the feet clear the lip. Pulling
  * up alone left the body hanging at the edge; nothing moved it forward onto the floor above. */
 #define VR_CLIMB_MANTLE_REACH 12.0f
-#define VR_CLIMB_MANTLE_SPEED 100.0f
-#define VR_CLIMB_MANTLE_LIFT 80.0f
+#define VR_CLIMB_MANTLE_SPEED 170.0f
+#define VR_CLIMB_MANTLE_LIFT 120.0f
 
 static physent_t *PM_VRLadderAtPoint( const vec3_t point )
 {
@@ -2362,12 +2363,16 @@ static physent_t *PM_VRLadderAtPoint( const vec3_t point )
 		if( !pe->model || (modtype_t)pmove->PM_GetModelType( pe->model ) != mod_brush || pe->skin != CONTENTS_LADDER )
 			continue;
 		pmove->PM_GetModelBounds( pe->model, mins, maxs );
-		for( j = 0; j < 3; j++ )
 		{
-			const float above = j == 2 ? VR_CLIMB_LEDGE_HEIGHT : 0.0f;
-			if( point[j] < pe->origin[j] + mins[j] - VR_CLIMB_HAND_MARGIN ||
-				point[j] > pe->origin[j] + maxs[j] + VR_CLIMB_HAND_MARGIN + above )
-				break;
+			const float side = point[2] > pe->origin[2] + maxs[2] ? VR_CLIMB_LEDGE_REACH : 0.0f;
+			for( j = 0; j < 3; j++ )
+			{
+				const float above = j == 2 ? VR_CLIMB_LEDGE_HEIGHT : 0.0f;
+				const float out = VR_CLIMB_HAND_MARGIN + ( j == 2 ? 0.0f : side );
+				if( point[j] < pe->origin[j] + mins[j] - out ||
+					point[j] > pe->origin[j] + maxs[j] + out + above )
+					break;
+			}
 		}
 		if( j == 3 )
 			return pe;

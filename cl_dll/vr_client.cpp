@@ -772,7 +772,9 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 }
 
 /* Same box test as PM_VRLadderAtPoint (pm_shared.c), on the ladders the client's player movement
- * was set up with this frame. above = how far above the ladder top still counts. */
+ * was set up with this frame. above = how far above the ladder top still counts; up there a hand
+ * may also be VR_CLIMB_LEDGE_REACH out to the sides (on the floor past the edge). */
+#define VR_CLIMB_LEDGE_REACH 24.0f /* = pm_shared.c */
 static int VR_LadderAtPoint( const Vector &point, float margin, float above )
 {
 	if( !pmove )
@@ -786,10 +788,12 @@ static int VR_LadderAtPoint( const Vector &point, float margin, float above )
 		if( !pe->model || pe->skin != CONTENTS_LADDER || pmove->PM_GetModelType( pe->model ) != mod_brush )
 			continue;
 		pmove->PM_GetModelBounds( pe->model, mins, maxs );
+		const float side = above > 0.0f && point[2] > pe->origin[2] + maxs[2] ? VR_CLIMB_LEDGE_REACH : 0.0f;
 		for( j = 0; j < 3; j++ )
 		{
-			if( point[j] < pe->origin[j] + mins[j] - margin ||
-				point[j] > pe->origin[j] + maxs[j] + margin + ( j == 2 ? above : 0.0f ))
+			const float out = margin + ( j == 2 ? 0.0f : side );
+			if( point[j] < pe->origin[j] + mins[j] - out ||
+				point[j] > pe->origin[j] + maxs[j] + out + ( j == 2 ? above : 0.0f ))
 				break;
 		}
 		if( j == 3 )
