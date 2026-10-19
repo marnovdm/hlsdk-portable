@@ -149,6 +149,11 @@ static char grgszTextureName[CTEXTURESMAX][CBTEXTURENAMEMAX];
 static char grgchTextureType[CTEXTURESMAX];
 
 int g_onladder = 0;
+/* VR hand climbing this move: the hands' climb speed, -1 when not climbing by hand. A still hand's
+ * tracked velocity is never exactly 0, which the stock first-step rule (any speed with no step
+ * pending) turned into a ladder sound every 350 ms while hanging still. */
+static float pm_vr_climb_speed = -1.0f;
+#define VR_CLIMB_STEP_SPEED 15.0f	/* units/s, ~0.4 m/s: tracking noise of a still hand is far below */
 
 static void PM_InitTrace( trace_t *trace, const vec3_t end )
 {
@@ -693,6 +698,9 @@ void PM_UpdateStepSound( void )
 
 	// determine if we are on a ladder
 	fLadder = ( pmove->movetype == MOVETYPE_FLY );// IsOnLadder();
+
+	if( pm_vr_climb_speed >= 0.0f && pm_vr_climb_speed < VR_CLIMB_STEP_SPEED )
+		return;
 
 	// UNDONE: need defined numbers for run, walk, crouch, crouch run velocities!!!!	
 	if( ( pmove->flags & FL_DUCKING) || fLadder )
@@ -3290,6 +3298,7 @@ void PM_PlayerMove( qboolean server )
 		}
 	}
 
+	pm_vr_climb_speed = vrClimbLadder ? Length( vrClimbVelocity ) : -1.0f;
 	PM_UpdateStepSound();
 
 	PM_Duck();
