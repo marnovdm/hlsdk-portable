@@ -492,13 +492,16 @@ void CBarnacleGrapple::CreateEffect( void )
 
 	UTIL_MakeVectors( m_pPlayer->GetWeaponViewAngles() );
 
-	Vector vecOrigin =
-		m_pPlayer->GetGunPosition() +
-		gpGlobals->v_forward * 16.0 +
-		gpGlobals->v_right * 8.0 +
-		gpGlobals->v_up * -8.0;
+	// the right/down offset puts the flat viewmodel's mouth on screen; in VR the gun position is the hand's
+	Vector vecOrigin = m_pPlayer->GetGunPosition() + gpGlobals->v_forward * 16.0;
+	if( !m_pPlayer->HasFreshVRPose() )
+		vecOrigin = vecOrigin + gpGlobals->v_right * 8.0 + gpGlobals->v_up * -8.0;
 
+	// The tip flies along UTIL_MakeAimVectors( angles ), which takes model angles (pitch up = positive), so
+	// the view pitch is negated as the stock code did with v_angle. Without it the tongue went down when
+	// aimed up and up when aimed down.
 	Vector vecAngles = m_pPlayer->GetWeaponViewAngles();
+	vecAngles.x = -vecAngles.x;
 
 	m_pTip->SetPosition( vecOrigin, vecAngles, m_pPlayer );
 
