@@ -6,6 +6,7 @@
 #include "entity_types.h"
 #include "vr_client.h"
 #include "com_model.h"
+#include "pm_defs.h"
 
 #include <float.h>
 #include <math.h>
@@ -36,6 +37,13 @@ static int g_vrTorchModelIndex;
 static cl_entity_t g_vrHandEntities[VR_CLIENT_MAX_HANDS];
 static struct model_s *g_vrHandModels[VR_CLIENT_MAX_HANDS];
 static int g_vrHandModelIndices[VR_CLIENT_MAX_HANDS];
+static int g_vrClimbing[VR_CLIENT_MAX_HANDS];     /* this hand holds a ladder, see VR_UpdateClimbing */
+static int g_vrClimbGripDown[VR_CLIENT_MAX_HANDS];
+static float g_vrClimbReleaseTime;
+static Vector g_vrEyeOrigin;                       /* simulated origin + view height of the last frame */
+static int g_vrEyeOriginValid;
+
+extern "C" playermove_t *pmove;
 
 typedef struct vr_weapon_pose_s
 {
@@ -63,8 +71,12 @@ static void VR_ClearFrame()
 	g_vrScopeEngaged = 0;
 	g_vrScopeAnglesValid = 0;
 	g_vrCachedWeaponPoseValid = 0;
+	memset( g_vrClimbing, 0, sizeof( g_vrClimbing ));
+	memset( g_vrClimbGripDown, 0, sizeof( g_vrClimbGripDown ));
+	g_vrEyeOriginValid = 0;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", 0.0f );
 	gEngfuncs.Cvar_SetValue( "vr_scope_engaged", 0.0f );
+	gEngfuncs.Cvar_SetValue( "vr_climbing", 0.0f );
 }
 
 static void VR_ReleaseScopeButton()
@@ -315,6 +327,8 @@ void VR_Init()
 	CVAR_CREATE( "vr_crowbar_pitchadjust", "-25", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_weapon_recoil", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_weapon_stabilised", "0", 0 );
+	CVAR_CREATE( "vr_hand_ladders", "1", FCVAR_ARCHIVE ); // grip a ladder with a hand and pull to climb
+	CVAR_CREATE( "vr_climbing", "0", 0 ); // bit 1 weapon hand, bit 2 off hand holds a ladder (read by the engine)
 	CVAR_CREATE( "vr_scope_engaged", "0", 0 );
 	CVAR_CREATE( "vr_scope_stabilise", "1", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_flashlight_model", "1", FCVAR_ARCHIVE );
@@ -527,8 +541,9 @@ static int VR_ResolveWeaponPose( float bodyYaw, float frametime, vr_weapon_pose_
 	separationMinimum = g_vrFrame.world_scale > 0.0f ? g_vrFrame.world_scale * 0.15f : 1.0f;
 	separationMaximum = g_vrFrame.world_scale > 0.0f ? g_vrFrame.world_scale * 0.50f : 20.0f;
 	separationLength = separation.Length();
+	/* a hand holding a ladder is climbing, not steadying the gun */
 	pose->stabilised = ( support->flags & VR_CLIENT_HAND_AIM_VALID ) &&
-		( support->flags & VR_CLIENT_HAND_SQUEEZE_PRESSED ) &&
+		( support->flags & VR_CLIENT_HAND_SQUEEZE_PRESSED ) && !g_vrClimbing[offhand] && !g_vrClimbing[dominant] &&
 		separationLength > separationMinimum && separationLength < separationMaximum;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", pose->stabilised ? 1.0f : 0.0f );
 	if( pose->stabilised )
@@ -690,6 +705,9 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 		gEngfuncs.Cvar_SetValue( "vr_scope_engaged", 0.0f );
 		return;
 	}
+	/* the eye as player movement sees it (origin + view_ofs), for the ladder test of the hands */
+	g_vrEyeOrigin = Vector( pparams->simorg ) + Vector( pparams->viewheight );
+	g_vrEyeOriginValid = 1;
 	if( !VR_GetWeaponPose( pparams->cl_viewangles[YAW], pparams->frametime, &pose ) )
 	{
 		return;
@@ -738,6 +756,84 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 	}
 }
 
+/* Same box test as PM_VRLadderAtPoint (pm_shared.c), on the ladders the client's player movement
+ * was set up with this frame. above = how far above the ladder top still counts. */
+static int VR_LadderAtPoint( const Vector &point, float margin, float above )
+{
+	if( !pmove )
+		return 0;
+	for( int i = 0; i < pmove->nummoveent; i++ )
+	{
+		physent_t *pe = &pmove->moveents[i];
+		vec3_t mins, maxs;
+		int j;
+
+		if( !pe->model || pe->skin != CONTENTS_LADDER || pmove->PM_GetModelType( pe->model ) != mod_brush )
+			continue;
+		pmove->PM_GetModelBounds( pe->model, mins, maxs );
+		for( j = 0; j < 3; j++ )
+		{
+			if( point[j] < pe->origin[j] + mins[j] - margin ||
+				point[j] > pe->origin[j] + maxs[j] + margin + ( j == 2 ? above : 0.0f ))
+				break;
+		}
+		if( j == 3 )
+			return 1;
+	}
+	return 0;
+}
+
+/* A hand grabs a ladder when its grip is pressed while it is on the ladder (pressing the grip
+ * elsewhere and moving onto a ladder does not, so two-handed aim never snags one) and holds it
+ * while the grip stays down and the hand stays near it (36 units above the top: the ledge; a hand
+ * may also grab there while the other one holds the ladder). The
+ * server and prediction get this as CLIMB flags; the move itself is in pm_shared.c. */
+#define VR_CLIMB_GRAB_MARGIN 4.0f
+#define VR_CLIMB_HOLD_MARGIN 8.0f  /* = VR_CLIMB_HAND_MARGIN in pm_shared.c */
+#define VR_CLIMB_LEDGE_HEIGHT 36.0f
+#define VR_CLIMB_RELOAD_GUARD 0.4f /* s: a grip released on a ladder is no reload tap */
+
+static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
+{
+	const int dominant = VR_GetDominantHand();
+	const int offhand = dominant == VR_CLIENT_HAND_LEFT ? VR_CLIENT_HAND_RIGHT : VR_CLIENT_HAND_LEFT;
+	const int enabled = g_vrEyeOriginValid && CVAR_GET_FLOAT( "vr_hand_ladders" ) != 0.0f;
+	const float now = gEngfuncs.GetClientTime();
+	float climbing = 0.0f;
+
+	for( int role = 0; role < 2; role++ )
+	{
+		const int hand = role ? offhand : dominant;
+		const vr_client_hand_t *state = &g_vrFrame.hands[hand];
+		const int valid = enabled && ( state->flags & VR_CLIENT_HAND_AIM_VALID );
+		const int down = valid && ( state->flags & VR_CLIENT_HAND_SQUEEZE_PRESSED );
+		const Vector point = g_vrEyeOrigin + ( role ? pose.supportOffset : pose.weaponOffset );
+
+		const int other = role ? dominant : offhand;
+		/* with the other hand on the ladder, also above its top (hand over hand onto the ledge) */
+		if( down && !g_vrClimbGripDown[hand] &&
+			VR_LadderAtPoint( point, VR_CLIMB_GRAB_MARGIN, g_vrClimbing[other] ? VR_CLIMB_LEDGE_HEIGHT : 0.0f ))
+		{
+			g_vrClimbing[hand] = 1;
+			VR_Haptic( 40.0f, hand, 0.6f );
+		}
+		else if( g_vrClimbing[hand] && ( !down || !VR_LadderAtPoint( point, VR_CLIMB_HOLD_MARGIN, VR_CLIMB_LEDGE_HEIGHT )))
+		{
+			g_vrClimbing[hand] = 0;
+			if( hand == dominant )
+				g_vrClimbReleaseTime = now;
+		}
+		g_vrClimbGripDown[hand] = down;
+	}
+
+	if( g_vrClimbing[dominant] || ( g_vrClimbReleaseTime > 0.0f && now - g_vrClimbReleaseTime < VR_CLIMB_RELOAD_GUARD ))
+		climbing += 1.0f;
+	if( g_vrClimbing[offhand] )
+		climbing += 2.0f;
+	if( CVAR_GET_FLOAT( "vr_climbing" ) != climbing )
+		gEngfuncs.Cvar_SetValue( "vr_climbing", climbing );
+}
+
 static int32_t VR_CLIENT_CALL VR_BuildUsercmdSidecar( const vr_client_usercmd_t *cmd,
 	vr_usercmd_sidecar_t *sample )
 {
@@ -751,6 +847,18 @@ static int32_t VR_CLIENT_CALL VR_BuildUsercmdSidecar( const vr_client_usercmd_t 
 		return 0;
 	pose.weaponAngles = VR_WrapAngles( VR_ModelAngles( pose.weaponAngles )); /* see VR_UpdateViewmodel */
 	pose.supportAngles = VR_WrapAngles( pose.supportAngles );
+	VR_UpdateClimbing( pose );
+	{
+		const int dominant = VR_GetDominantHand();
+		const int offhand = dominant == VR_CLIENT_HAND_LEFT ? VR_CLIENT_HAND_RIGHT : VR_CLIENT_HAND_LEFT;
+		const Vector offhandVelocity = VR_RotateYaw( g_vrFrame.hands[offhand].linear_velocity, cmd->viewangles[YAW] );
+		for( index = 0; index < 3; ++index )
+			sample->offhand_velocity[index] = VR_UsercmdSidecarQuantize( offhandVelocity[index], 8.0f );
+		if( g_vrClimbing[dominant] )
+			sample->flags |= VR_USERCMD_SIDECAR_CLIMB_WEAPON;
+		if( g_vrClimbing[offhand] )
+			sample->flags |= VR_USERCMD_SIDECAR_CLIMB_OFFHAND;
+	}
 	for( index = 0; index < 3; ++index )
 	{
 		sample->weapon_position[index] = VR_UsercmdSidecarQuantize( pose.weaponOffset[index], 8.0f );
@@ -760,7 +868,7 @@ static int32_t VR_CLIENT_CALL VR_BuildUsercmdSidecar( const vr_client_usercmd_t 
 		sample->offhand_angles[index] = VR_UsercmdSidecarQuantize( pose.supportAngles[index], 128.0f );
 	}
 	sample->version = VR_USERCMD_SIDECAR_VERSION;
-	sample->flags = VR_USERCMD_SIDECAR_POSE_VALID;
+	sample->flags |= VR_USERCMD_SIDECAR_POSE_VALID;
 	return 1;
 }
 
