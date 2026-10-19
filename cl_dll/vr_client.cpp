@@ -24,6 +24,7 @@
 #define WEAPON_PENGUIN 21
 #define WEAPON_PIPEWRENCH 22
 #define WEAPON_SNIPERRIFLE 24
+#define WEAPON_SPORELAUNCHER 25
 
 static vr_client_frame_t g_vrFrame;
 static vr_client_engine_api_t g_vrEngineAPI;
@@ -783,6 +784,11 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->angles );
 	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->curstate.angles );
 	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->latched.prevangles );
+	/* Spore Launcher: the reload spore hangs below the gun outside the reload (the hand that carried it is
+	 * gone); patch-weapon-models.py gives its body part an empty second submodel, shown except while
+	 * reload_load (sequence 3) carries the spore into the mouth */
+	if( g_vrCurrentWeapon == WEAPON_SPORELAUNCHER && viewmodel->model && !strcmp( viewmodel->model->name, "models/v_spore_launcher.mdl" ))
+		viewmodel->curstate.body = viewmodel->curstate.sequence == 3 ? 0 : 1;
 	VR_RefreshLaserSight( pose.weaponOffset, pose.weaponAngles ); /* keep the laser on the gun this frame */
 	VectorCopy( pose.weaponVelocity, viewmodel->curstate.velocity );
 
