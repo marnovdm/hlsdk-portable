@@ -2343,6 +2343,12 @@ void PM_LadderMove( physent_t *pLadder )
 #define VR_CLIMB_HAND_MARGIN 8.0f
 #define VR_CLIMB_LEDGE_HEIGHT 36.0f
 #define VR_CLIMB_MAX_SPEED 600.0f
+/* Mantle: pulling up with the feet this close to the ladder's top, the hands carry the player over it - forward
+ * towards the hands (they hold the top edge, in front) and up until the feet clear the lip. Pulling
+ * up alone left the body hanging at the edge; nothing moved it forward onto the floor above. */
+#define VR_CLIMB_MANTLE_REACH 12.0f
+#define VR_CLIMB_MANTLE_SPEED 100.0f
+#define VR_CLIMB_MANTLE_LIFT 80.0f
 
 static physent_t *PM_VRLadderAtPoint( const vec3_t point )
 {
@@ -2373,7 +2379,7 @@ static physent_t *PM_VRHandClimb( vec3_t velocity )
 {
 	const vr_usercmd_sidecar_t *sample = &pm_vr_usercmd_sidecar;
 	physent_t *ladder = NULL;
-	vec3_t eye;
+	vec3_t eye, ahead = { 0.0f, 0.0f, 0.0f };
 	int hand, count = 0;
 	float speed;
 
@@ -2399,6 +2405,8 @@ static physent_t *PM_VRHandClimb( vec3_t velocity )
 		ladder = pe;
 		for( i = 0; i < 3; i++ )
 			velocity[i] -= handVelocity[i] * ( 1.0f / 8.0f );
+		ahead[0] += offset[0] * ( 1.0f / 8.0f );
+		ahead[1] += offset[1] * ( 1.0f / 8.0f );
 		count++;
 	}
 	if( !count )
@@ -2408,6 +2416,24 @@ static physent_t *PM_VRHandClimb( vec3_t velocity )
 	speed = Length( velocity );
 	if( speed > VR_CLIMB_MAX_SPEED )
 		VectorScale( velocity, VR_CLIMB_MAX_SPEED / speed, velocity );
+
+	{
+		vec3_t mins, maxs;
+		float top, feet, distance;
+
+		pmove->PM_GetModelBounds( ladder->model, mins, maxs );
+		top = ladder->origin[2] + maxs[2];
+		feet = pmove->origin[2] + pmove->player_mins[pmove->usehull][2];
+		distance = sqrt( ahead[0] * ahead[0] + ahead[1] * ahead[1] );
+		// only while pulling up: hanging still or climbing down from the top is left alone
+		if( feet >= top - VR_CLIMB_MANTLE_REACH && distance > 4.0f * count && velocity[2] > 20.0f )
+		{
+			velocity[0] = ahead[0] * VR_CLIMB_MANTLE_SPEED / distance;
+			velocity[1] = ahead[1] * VR_CLIMB_MANTLE_SPEED / distance;
+			if( feet < top + 2.0f && velocity[2] < VR_CLIMB_MANTLE_LIFT )
+				velocity[2] = VR_CLIMB_MANTLE_LIFT;
+		}
+	}
 	return ladder;
 }
 
