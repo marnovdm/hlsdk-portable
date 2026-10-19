@@ -691,7 +691,8 @@ int VR_IsMirroredHandEntity( const struct cl_entity_s *entity )
 
 static int VR_CanRenderPresentation( const ref_params_s *pparams )
 {
-	return pparams && !g_vrScopeEngaged && !pparams->intermission && !pparams->spectator && !pparams->onlyClientDraw &&
+	/* zoomed: hidden for the darkened-eyes scope; the scope lens (vr_scope_lens) keeps the hands and gun */
+	return pparams && ( !g_vrScopeEngaged || CVAR_GET_FLOAT( "vr_scope_lens" ) != 0.0f ) && !pparams->intermission && !pparams->spectator && !pparams->onlyClientDraw &&
 		pparams->health > 0 && pparams->viewentity == pparams->playernum + 1 &&
 		!gEngfuncs.IsSpectateOnly();
 }
