@@ -642,6 +642,13 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 	// smooth out stair step ups
 #if 1
+	// VR: standing up from a duck moves the origin up 18 units too, which this took for a stair step:
+	// the camera lagged up to 18 units below the hands and rose after them (physical crouch: a visible
+	// snap up to the laser). The VR view follows the head, so an unduck is not smoothed there.
+	static float oldviewheight;
+	if( VR_IsActive() && pparams->viewheight[2] > oldviewheight + 1.0f )
+		oldz = pparams->simorg[2];
+	oldviewheight = pparams->viewheight[2];
 	if( !pparams->smoothing && pparams->onground && pparams->simorg[2] - oldz > 0.0f )
 	{
 		float steptime;
