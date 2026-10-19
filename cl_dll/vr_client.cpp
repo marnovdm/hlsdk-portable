@@ -38,7 +38,6 @@ static cl_entity_t g_vrHandEntities[VR_CLIENT_MAX_HANDS];
 static struct model_s *g_vrHandModels[VR_CLIENT_MAX_HANDS];
 static int g_vrHandModelIndices[VR_CLIENT_MAX_HANDS];
 static int g_vrClimbing[VR_CLIENT_MAX_HANDS];     /* this hand holds a ladder, see VR_UpdateClimbing */
-static int g_vrClimbGripDown[VR_CLIENT_MAX_HANDS];
 static float g_vrClimbReleaseTime;
 static Vector g_vrEyeOrigin;                       /* simulated origin + view height of the last frame */
 static int g_vrEyeOriginValid;
@@ -72,7 +71,6 @@ static void VR_ClearFrame()
 	g_vrScopeAnglesValid = 0;
 	g_vrCachedWeaponPoseValid = 0;
 	memset( g_vrClimbing, 0, sizeof( g_vrClimbing ));
-	memset( g_vrClimbGripDown, 0, sizeof( g_vrClimbGripDown ));
 	g_vrClimbReleaseTime = 0.0f;
 	g_vrEyeOriginValid = 0;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", 0.0f );
@@ -798,12 +796,13 @@ static int VR_LadderAtPoint( const Vector &point, float margin, float above )
 	return 0;
 }
 
-/* A hand grabs a ladder when its grip is pressed while it is on the ladder (pressing the grip
- * elsewhere and moving onto a ladder does not, so two-handed aim never snags one) and holds it
+/* A hand grabs a ladder when its grip is down while it is on the ladder - pressed there or held
+ * while reaching for it (the press had to land on the ladder; a moment early passed through) -
+ * except the off hand while it steadies the gun, so two-handed aim never snags one. It holds it
  * while the grip stays down and the hand stays near it (36 units above the top: the ledge; a hand
  * may also grab there while the other one holds the ladder). The
  * server and prediction get this as CLIMB flags; the move itself is in pm_shared.c. */
-#define VR_CLIMB_GRAB_MARGIN 4.0f
+#define VR_CLIMB_GRAB_MARGIN 6.0f
 #define VR_CLIMB_HOLD_MARGIN 8.0f  /* = VR_CLIMB_HAND_MARGIN in pm_shared.c */
 #define VR_CLIMB_LEDGE_HEIGHT 36.0f
 #define VR_CLIMB_RELOAD_GUARD 0.4f /* s: a grip released on a ladder is no reload tap */
@@ -826,7 +825,7 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 
 		const int other = role ? dominant : offhand;
 		/* with the other hand on the ladder, also above its top (hand over hand onto the ledge) */
-		if( down && !g_vrClimbGripDown[hand] &&
+		if( down && !g_vrClimbing[hand] && !( hand == offhand && pose.stabilised ) &&
 			VR_LadderAtPoint( point, VR_CLIMB_GRAB_MARGIN, g_vrClimbing[other] ? VR_CLIMB_LEDGE_HEIGHT : 0.0f ))
 		{
 			g_vrClimbing[hand] = 1;
@@ -838,7 +837,6 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 			if( hand == dominant )
 				g_vrClimbReleaseTime = now;
 		}
-		g_vrClimbGripDown[hand] = down;
 	}
 
 	/* client time restarts with every map/load: a release time from before that lies in the future
