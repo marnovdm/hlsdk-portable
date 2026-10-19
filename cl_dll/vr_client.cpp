@@ -743,6 +743,11 @@ void VR_UpdateViewmodel( struct ref_params_s *pparams )
 	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->angles );
 	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->curstate.angles );
 	VectorCopy( VR_ModelAngles( pose.weaponAngles ), viewmodel->latched.prevangles );
+	/* Shotgun: the CS M3 shell hangs below the gun outside the reload (the hand that carried it is gone);
+	 * patch-weapon-models.py moves it into a body part of its own with an empty alternative, shown only
+	 * while start_reload (5) and reload (3) bring it to the port. A stock model has one body part: no-op. */
+	if( viewmodel->model && !strcmp( viewmodel->model->name, "models/v_shotgun.mdl" ))
+		viewmodel->curstate.body = viewmodel->curstate.sequence == 3 || viewmodel->curstate.sequence == 5 ? 0 : 1;
 	VR_RefreshLaserSight( pose.weaponOffset, pose.weaponAngles ); /* keep the laser on the gun this frame */
 	VectorCopy( pose.weaponVelocity, viewmodel->curstate.velocity );
 

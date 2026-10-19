@@ -397,7 +397,8 @@ void CBasePlayerWeapon::MakeLaser( void )
 	// longer): it follows the hand, not the animated gun, so it pointed off while the animation swung the gun.
 	if( g_flDeployLaserHideUntil - flTime > 5.0f )
 		g_flDeployLaserHideUntil = 0.0f; // client time restarted (map load)
-	if( !m_pPlayer || iMode < 1 || iMode > 2 || m_fInReload || m_pPlayer->m_flNextAttack > 0.0f ||
+	// (m_fInSpecialReload: the one-at-a-time reloads, shotgun and Opposing Force's spore launcher)
+	if( !m_pPlayer || iMode < 1 || iMode > 2 || m_fInReload || m_fInSpecialReload || m_pPlayer->m_flNextAttack > 0.0f ||
 		flTime < g_flDeployLaserHideUntil || ( bRpg && ( iMode != 1 || !( (CRpg *)this )->m_fSpotActive )))
 	{
 		KillLaser();
