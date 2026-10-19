@@ -369,9 +369,9 @@ void CBasePlayerWeapon::MakeLaser( void )
 	// and only while that spot is on. The spot alone is a fixed-size sprite that shrinks to a speck at
 	// range and lags the gun (server-updated), so far targets (Xen's Nihilanth crystals) were hard to aim at.
 	const BOOL bRpg = m_iId == WEAPON_RPG;
-	// No laser while reloading: it follows the hand, not the animated gun, so it pointed off on its own
-	// while the reload animation swung the gun about.
-	if( !m_pPlayer || iMode < 1 || iMode > 2 || m_fInReload || ( bRpg && ( iMode != 1 || !( (CRpg *)this )->m_fSpotActive )))
+	// No laser while reloading or drawing the weapon (m_flNextAttack runs for both): it follows the hand,
+	// not the animated gun, so it pointed off on its own while the animation swung the gun about.
+	if( !m_pPlayer || iMode < 1 || iMode > 2 || m_fInReload || m_pPlayer->m_flNextAttack > 0.0f || ( bRpg && ( iMode != 1 || !( (CRpg *)this )->m_fSpotActive )))
 	{
 		KillLaser();
 		return;
