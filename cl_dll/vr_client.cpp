@@ -43,6 +43,7 @@ static struct model_s *g_vrHandModels[VR_CLIENT_MAX_HANDS];
 static int g_vrHandModelIndices[VR_CLIENT_MAX_HANDS];
 static int g_vrClimbing[VR_CLIENT_MAX_HANDS];     /* this hand holds a ladder, see VR_UpdateClimbing */
 static float g_vrClimbReleaseTime;
+static int g_vrLadderLetGo;                        /* hands let go of a ladder: no stock ladder hold yet */
 static Vector g_vrEyeOrigin;                       /* simulated origin + view height of the last frame */
 static int g_vrEyeOriginValid;
 
@@ -75,6 +76,7 @@ static void VR_ClearFrame()
 	g_vrScopeAnglesValid = 0;
 	g_vrCachedWeaponPoseValid = 0;
 	memset( g_vrClimbing, 0, sizeof( g_vrClimbing ));
+	g_vrLadderLetGo = 0;
 	g_vrClimbReleaseTime = 0.0f;
 	g_vrEyeOriginValid = 0;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", 0.0f );
@@ -330,7 +332,7 @@ void VR_Init()
 	CVAR_CREATE( "vr_crowbar_pitchadjust", "-25", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_weapon_recoil", "0", FCVAR_ARCHIVE );
 	CVAR_CREATE( "vr_weapon_stabilised", "0", 0 );
-	CVAR_CREATE( "vr_hand_ladders", "1", FCVAR_ARCHIVE ); // grip a ladder with a hand and pull to climb
+	CVAR_CREATE( "vr_hand_ladders", "1", FCVAR_ARCHIVE ); // grip a ladder with a hand and pull to climb; 2 = hands only
 	CVAR_CREATE( "vr_climbing", "0", 0 ); // bit 1 weapon hand, bit 2 off hand holds a ladder (read by the engine)
 	CVAR_CREATE( "vr_scope_engaged", "0", 0 );
 	CVAR_CREATE( "vr_scope_stabilise", "1", FCVAR_ARCHIVE );
@@ -837,6 +839,7 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 	const int offhand = dominant == VR_CLIENT_HAND_LEFT ? VR_CLIENT_HAND_RIGHT : VR_CLIENT_HAND_LEFT;
 	const int enabled = g_vrEyeOriginValid && CVAR_GET_FLOAT( "vr_hand_ladders" ) != 0.0f;
 	const float now = gEngfuncs.GetClientTime();
+	const int wasClimbing = g_vrClimbing[dominant] || g_vrClimbing[offhand];
 	float climbing = 0.0f;
 
 	for( int role = 0; role < 2; role++ )
@@ -867,6 +870,16 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 	 * and blocked reload until the new map's clock caught up */
 	if( g_vrClimbReleaseTime > now )
 		g_vrClimbReleaseTime = 0.0f;
+	/* letting go with both hands drops the player, instead of the body clinging on by the stock ladder
+	 * rule while it is inside the ladder; the stick, a new grab or landing hands the ladder back */
+	if( g_vrClimbing[dominant] || g_vrClimbing[offhand] )
+		g_vrLadderLetGo = 0;
+	else if( wasClimbing )
+		g_vrLadderLetGo = 1;
+	if( g_vrLadderLetGo && (( pmove && pmove->onground != -1 ) ||
+		fabsf( g_vrFrame.hands[offhand].stick[0] ) > 0.3f || fabsf( g_vrFrame.hands[offhand].stick[1] ) > 0.3f ))
+		g_vrLadderLetGo = 0;
+
 	if( g_vrClimbing[dominant] || ( g_vrClimbReleaseTime > 0.0f && now - g_vrClimbReleaseTime < VR_CLIMB_RELOAD_GUARD ))
 		climbing += 1.0f;
 	if( g_vrClimbing[offhand] )
@@ -899,6 +912,8 @@ static int32_t VR_CLIENT_CALL VR_BuildUsercmdSidecar( const vr_client_usercmd_t 
 			sample->flags |= VR_USERCMD_SIDECAR_CLIMB_WEAPON;
 		if( g_vrClimbing[offhand] )
 			sample->flags |= VR_USERCMD_SIDECAR_CLIMB_OFFHAND;
+		if( g_vrLadderLetGo || CVAR_GET_FLOAT( "vr_hand_ladders" ) == 2.0f )
+			sample->flags |= VR_USERCMD_SIDECAR_NO_LADDER_HOLD;
 	}
 	for( index = 0; index < 3; ++index )
 	{

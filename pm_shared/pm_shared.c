@@ -3292,6 +3292,11 @@ void PM_PlayerMove( qboolean server )
 		// jump lets go
 		if( !( pmove->cmd.buttons & IN_JUMP ) && ( vrClimbLadder = PM_VRHandClimb( vrClimbVelocity )))
 			pLadder = vrClimbLadder;
+		// VR: hands-only climbing, or the hands just let go: the body does not cling to the ladder
+		else if( pLadder && pm_vr_usercmd_sidecar_active &&
+			( pm_vr_usercmd_sidecar.flags & VR_USERCMD_SIDECAR_POSE_VALID ) &&
+			( pm_vr_usercmd_sidecar.flags & VR_USERCMD_SIDECAR_NO_LADDER_HOLD ))
+			pLadder = NULL;
 		if( pLadder )
 		{
 			g_onladder = 1;
