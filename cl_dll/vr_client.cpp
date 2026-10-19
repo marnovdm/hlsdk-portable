@@ -73,6 +73,7 @@ static void VR_ClearFrame()
 	g_vrCachedWeaponPoseValid = 0;
 	memset( g_vrClimbing, 0, sizeof( g_vrClimbing ));
 	memset( g_vrClimbGripDown, 0, sizeof( g_vrClimbGripDown ));
+	g_vrClimbReleaseTime = 0.0f;
 	g_vrEyeOriginValid = 0;
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", 0.0f );
 	gEngfuncs.Cvar_SetValue( "vr_scope_engaged", 0.0f );
@@ -841,6 +842,10 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 		g_vrClimbGripDown[hand] = down;
 	}
 
+	/* client time restarts with every map/load: a release time from before that lies in the future
+	 * and blocked reload until the new map's clock caught up */
+	if( g_vrClimbReleaseTime > now )
+		g_vrClimbReleaseTime = 0.0f;
 	if( g_vrClimbing[dominant] || ( g_vrClimbReleaseTime > 0.0f && now - g_vrClimbReleaseTime < VR_CLIMB_RELOAD_GUARD ))
 		climbing += 1.0f;
 	if( g_vrClimbing[offhand] )
