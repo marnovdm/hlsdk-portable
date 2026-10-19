@@ -43,7 +43,7 @@ cvar_t corpsephysics = { "corpsephysics", "0", FCVAR_SERVER };
 cvar_t pushablemode = { "pushablemode", "0", FCVAR_SERVER };
 cvar_t vr_highlight_actionables = { "vr_highlight_actionables", "0", FCVAR_SERVER }; // off: user finds it unnecessary
 cvar_t vr_throw_scale = { "vr_throw_scale", "3.75", FCVAR_SERVER | FCVAR_ARCHIVE }; // see CBasePlayer::GetThrowVelocity
-cvar_t vr_gesture_triggered_use = { "vr_gesture_triggered_use", "1", FCVAR_SERVER };
+cvar_t vr_gesture_triggered_use = { "vr_gesture_triggered_use", "0", FCVAR_SERVER }; // off: fired mid-reach, vr_touch_use replaced it
 cvar_t vr_touch_use = { "vr_touch_use", "1", FCVAR_SERVER | FCVAR_ARCHIVE }; // buttons, doors, chargers react to a touching hand
 cvar_t vr_tank_grab = { "vr_tank_grab", "1", FCVAR_SERVER | FCVAR_ARCHIVE }; // mounted guns: near end follows the hand; 0 = point to aim
 cvar_t forcerespawn	= { "mp_forcerespawn","1", FCVAR_SERVER };
