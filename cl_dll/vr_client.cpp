@@ -844,6 +844,9 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 	const int enabled = g_vrEyeOriginValid && CVAR_GET_FLOAT( "vr_hand_ladders" ) != 0.0f;
 	const float now = gEngfuncs.GetClientTime();
 	const int wasClimbing = g_vrClimbing[dominant] || g_vrClimbing[offhand];
+	/* hanging in the air (climbing out at the top): either hand may grab above a ladder's top; standing
+	 * next to a ladder's top only with the other hand already on it, so walking by never snags one */
+	const int airborne = pmove && pmove->onground == -1;
 	float climbing = 0.0f;
 
 	for( int role = 0; role < 2; role++ )
@@ -855,9 +858,9 @@ static void VR_UpdateClimbing( const vr_weapon_pose_t &pose )
 		const Vector point = g_vrEyeOrigin + ( role ? pose.supportOffset : pose.weaponOffset );
 
 		const int other = role ? dominant : offhand;
-		/* with the other hand on the ladder, also above its top (hand over hand onto the ledge) */
+		/* with the other hand on the ladder or in the air, also above its top (onto the ledge) */
 		if( down && !g_vrClimbing[hand] && !( hand == offhand && pose.stabilised ) &&
-			VR_LadderAtPoint( point, VR_CLIMB_GRAB_MARGIN, g_vrClimbing[other] ? VR_CLIMB_LEDGE_HEIGHT : 0.0f ))
+			VR_LadderAtPoint( point, VR_CLIMB_GRAB_MARGIN, g_vrClimbing[other] || airborne ? VR_CLIMB_LEDGE_HEIGHT : 0.0f ))
 		{
 			g_vrClimbing[hand] = 1;
 			VR_Haptic( 40.0f, hand, 0.6f );
