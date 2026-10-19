@@ -547,9 +547,24 @@ static int VR_ResolveWeaponPose( float bodyYaw, float frametime, vr_weapon_pose_
 	gEngfuncs.Cvar_SetValue( "vr_weapon_stabilised", pose->stabilised ? 1.0f : 0.0f );
 	if( pose->stabilised )
 	{
-		/* VectorAngles returns model-convention pitch (positive = up); these are view angles */
-		VectorAngles( separation, pose->weaponAngles );
-		pose->weaponAngles[PITCH] = -pose->weaponAngles[PITCH];
+		/* The barrel follows the line between the hands; the roll comes from the gun hand (its up
+		 * axis squared onto that line), so tilting the wrist cants the gun as it does one-handed.
+		 * VectorAngles alone has no roll - the gun stayed upright when leaning round a corner. */
+		const Vector forward = separation / separationLength;
+		Vector up = VR_RotateYaw( weapon->aim.up, bodyYaw );
+
+		up = up - forward * DotProduct( up, forward );
+		if( up.Length() > 0.1f )
+		{
+			up = up.Normalize();
+			VR_BasisAngles( forward, CrossProduct( forward, up ), up, pose->weaponAngles );
+		}
+		else
+		{
+			/* VectorAngles returns model-convention pitch (positive = up); these are view angles */
+			VectorAngles( separation, pose->weaponAngles );
+			pose->weaponAngles[PITCH] = -pose->weaponAngles[PITCH];
+		}
 	}
 
 	/* The pitch adjust cvars use Lambda1VR's model convention (negative = tilt
