@@ -32,6 +32,28 @@
 #include "../com_weapons.h"
 #include "../demo.h"
 #include "../vr_client.h"
+#include "r_studioint.h"
+#include "studio.h"
+
+extern engine_studio_api_t IEngineStudio;
+
+// the laser stays off until the weapon's draw animation has played out (m_flNextAttack, 0.5 s, ends
+// before most of them do: the laser showed while the gun was still swinging up)
+static float g_flDeployLaserHideUntil;
+
+static float VR_ViewModelSequenceDuration( int modelindex, int sequence )
+{
+	struct model_s *model = gEngfuncs.pfnGetModelByIndex( modelindex );
+	studiohdr_t *hdr;
+	mstudioseqdesc_t *seq;
+
+	if( !model || !IEngineStudio.Mod_Extradata || !( hdr = (studiohdr_t *)IEngineStudio.Mod_Extradata( model )))
+		return 0.5f;
+	if( sequence < 0 || sequence >= hdr->numseq )
+		return 0.5f;
+	seq = (mstudioseqdesc_t *)( (byte *)hdr + hdr->seqindex ) + sequence;
+	return seq->fps > 0.0f && seq->numframes > 1 ? ( seq->numframes - 1 ) / seq->fps : 0.5f;
+}
 
 extern globalvars_t *gpGlobals;
 extern int g_iUser1;
@@ -217,6 +239,8 @@ BOOL CBasePlayerWeapon::DefaultDeploy( const char *szViewModel, const char *szWe
 	gEngfuncs.CL_LoadModel( szViewModel, &m_pPlayer->pev->viewmodel );
 
 	SendWeaponAnim( iAnim, skiplocal, body );
+	if( g_runfuncs )
+		g_flDeployLaserHideUntil = gEngfuncs.GetClientTime() + VR_ViewModelSequenceDuration( m_pPlayer->pev->viewmodel, iAnim );
 
 	g_irunninggausspred = false;
 	m_pPlayer->m_flNextAttack = 0.5f;
@@ -369,9 +393,12 @@ void CBasePlayerWeapon::MakeLaser( void )
 	// and only while that spot is on. The spot alone is a fixed-size sprite that shrinks to a speck at
 	// range and lags the gun (server-updated), so far targets (Xen's Nihilanth crystals) were hard to aim at.
 	const BOOL bRpg = m_iId == WEAPON_RPG;
-	// No laser while reloading or drawing the weapon (m_flNextAttack runs for both): it follows the hand,
-	// not the animated gun, so it pointed off on its own while the animation swung the gun about.
-	if( !m_pPlayer || iMode < 1 || iMode > 2 || m_fInReload || m_pPlayer->m_flNextAttack > 0.0f || ( bRpg && ( iMode != 1 || !( (CRpg *)this )->m_fSpotActive )))
+	// No laser while reloading or drawing the weapon (m_flNextAttack runs for both; the draw animation often
+	// longer): it follows the hand, not the animated gun, so it pointed off while the animation swung the gun.
+	if( g_flDeployLaserHideUntil - flTime > 5.0f )
+		g_flDeployLaserHideUntil = 0.0f; // client time restarted (map load)
+	if( !m_pPlayer || iMode < 1 || iMode > 2 || m_fInReload || m_pPlayer->m_flNextAttack > 0.0f ||
+		flTime < g_flDeployLaserHideUntil || ( bRpg && ( iMode != 1 || !( (CRpg *)this )->m_fSpotActive )))
 	{
 		KillLaser();
 		return;
