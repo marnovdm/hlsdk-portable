@@ -2009,6 +2009,9 @@ void CBasePlayer::PlayerUseInternal( BOOL highlightActionables, const Vector &ha
 			}
 			else
 				CLIENT_COMMAND( edict(), "vr_haptic 250 %d 1\n", hapticHand );
+			// tells the engine this click used something, so holding it (a charger) does not also
+			// cycle the laser (vr_laser_cycle 2)
+			CLIENT_COMMAND( edict(), "vr_use_hit 1\n" );
 			pObject->Use( this, this, USE_SET, 1 );
 		}
 		else if( useReleased )
