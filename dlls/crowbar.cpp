@@ -107,7 +107,9 @@ int CCrowbar::AddToPlayer( CBasePlayer *pPlayer )
 
 BOOL CCrowbar::Deploy()
 {
-	return DefaultDeploy( "models/v_crowbar.mdl", "models/p_crowbar.mdl", CROWBAR_DRAW, "crowbar" );
+	// VR: the crowbar comes out ready in the hand (grabbed from the shoulder), no draw animation
+	return DefaultDeploy( "models/v_crowbar.mdl", "models/p_crowbar.mdl",
+		m_pPlayer->HasFreshVRPose() ? CROWBAR_IDLE : CROWBAR_DRAW, "crowbar" );
 }
 
 void CCrowbar::Holster( int skiplocal /* = 0 */ )
