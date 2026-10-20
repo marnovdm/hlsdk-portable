@@ -2040,6 +2040,32 @@ static float HandDistanceOutsideBox( const Vector &hand, const Vector &mins, con
 	return sqrt( distance );
 }
 
+// The box a hand has to touch. Mappers put invisible use boxes in front of levers (of5a2's pit drone
+// doors: 16x72x64 in front of a 6 units thin func_rot_button), generous for a flat crosshair but a
+// door-sized press zone for a hand. For an invisible control whose target is a visible brush, only
+// the part of its box that overlaps the target's model (at rest) counts.
+static void TouchUseBox( CBaseEntity *pObject, Vector &mins, Vector &maxs )
+{
+	mins = pObject->pev->absmin;
+	maxs = pObject->pev->absmax;
+	if( pObject->pev->rendermode == kRenderNormal || pObject->pev->renderamt > 0 || FStringNull( pObject->pev->target ) )
+		return;
+	CBaseEntity *pTarget = UTIL_FindEntityByTargetname( NULL, STRING( pObject->pev->target ) );
+	if( !pTarget || !pTarget->IsBSPModel() || ( pTarget->pev->effects & EF_NODRAW ) ||
+		( pTarget->pev->rendermode != kRenderNormal && pTarget->pev->renderamt == 0 ) )
+		return;
+	Vector overlapMins, overlapMaxs;
+	for( int i = 0; i < 3; i++ )
+	{
+		overlapMins[i] = Q_max( mins[i], pTarget->pev->origin[i] + pTarget->pev->mins[i] );
+		overlapMaxs[i] = Q_min( maxs[i], pTarget->pev->origin[i] + pTarget->pev->maxs[i] );
+		if( overlapMins[i] > overlapMaxs[i] )
+			return; // target somewhere else (a door far away): the box is all there is to touch
+	}
+	mins = overlapMins;
+	maxs = overlapMaxs;
+}
+
 void CBasePlayer::VRTouchUse( BOOL poseFresh )
 {
 	const BOOL active = poseFresh && IsAlive() && CVAR_GET_FLOAT( "vr_touch_use" ) != 0.0f;
@@ -2062,7 +2088,9 @@ void CBasePlayer::VRTouchUseHand( const Vector &hand, int index )
 		{
 			if( !IsTouchUsable( pObject ) )
 				continue;
-			const float distance = HandDistanceOutsideBox( hand, pObject->pev->absmin, pObject->pev->absmax );
+			Vector mins, maxs;
+			TouchUseBox( pObject, mins, maxs );
+			const float distance = HandDistanceOutsideBox( hand, mins, maxs );
 			if( distance > best )
 				continue;
 			// not through a wall: traced from the eye (a hand pressed into a button starts in solid),
