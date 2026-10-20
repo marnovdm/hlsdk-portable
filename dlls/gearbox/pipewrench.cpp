@@ -71,6 +71,7 @@ void CPipeWrench::Spawn()
 
 void CPipeWrench::Precache(void)
 {
+	PRECACHE_SOUND( "weapons/cbar_draw.wav" ); // VR deploy, see Deploy
 	PRECACHE_MODEL("models/v_pipe_wrench.mdl");
 	PRECACHE_MODEL("models/w_pipe_wrench.mdl");
 	PRECACHE_MODEL("models/p_pipe_wrench.mdl");
@@ -110,7 +111,14 @@ int CPipeWrench::GetItemInfo(ItemInfo *p)
 BOOL CPipeWrench::Deploy()
 {
 	m_iSwingMode = 0;
-	return DefaultDeploy("models/v_pipe_wrench.mdl", "models/p_pipe_wrench.mdl", PIPEWRENCH_DRAW, "pipewrench");
+	// VR: the wrench comes out ready in the hand (grabbed from the shoulder), no 0.7 s draw animation;
+	// the draw sound it carries (patch-weapon-models.py) is played here instead
+	const BOOL vrReady = m_pPlayer->HasFreshVRPose();
+#if !CLIENT_DLL
+	if( vrReady )
+		EMIT_SOUND( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/cbar_draw.wav", 1.0f, ATTN_NORM );
+#endif
+	return DefaultDeploy("models/v_pipe_wrench.mdl", "models/p_pipe_wrench.mdl", vrReady ? PIPEWRENCH_IDLE1 : PIPEWRENCH_DRAW, "pipewrench");
 }
 
 void CPipeWrench::Holster(int skiplocal /* = 0 */)

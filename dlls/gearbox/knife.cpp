@@ -65,6 +65,7 @@ void CKnife::Spawn()
 
 void CKnife::Precache(void)
 {
+	PRECACHE_SOUND( "weapons/cbar_draw.wav" ); // VR deploy, see Deploy
 	PRECACHE_MODEL("models/v_knife.mdl");
 	PRECACHE_MODEL("models/w_knife.mdl");
 	PRECACHE_MODEL("models/p_knife.mdl");
@@ -98,7 +99,13 @@ int CKnife::GetItemInfo(ItemInfo *p)
 
 BOOL CKnife::Deploy()
 {
-	return DefaultDeploy("models/v_knife.mdl", "models/p_knife.mdl", KNIFE_DRAW, "knife");
+	// VR: the knife comes out ready in the hand, no draw animation; its draw sound is played here instead
+	const BOOL vrReady = m_pPlayer->HasFreshVRPose();
+#if !CLIENT_DLL
+	if( vrReady )
+		EMIT_SOUND( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/cbar_draw.wav", 1.0f, ATTN_NORM );
+#endif
+	return DefaultDeploy("models/v_knife.mdl", "models/p_knife.mdl", vrReady ? KNIFE_IDLE1 : KNIFE_DRAW, "knife");
 }
 
 void CKnife::Holster(int skiplocal /* = 0 */)
